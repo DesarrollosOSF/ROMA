@@ -1,0 +1,5 @@
+nombre_activo,codigo_interno,codigo_patrimonial,categoria,ubicacion,marca,modelo,estado_actual
+Compresor de Aire,COMP-001,PAT-001,equipo_especial,Taller Principal,Atlas Copco,GA11,operativo
+Vehículo Pickup,VEH-001,PAT-002,vehiculos,Parqueadero,Toyota,Hilux 2020,operativo
+Máquina Soldadora,MAQ-001,PAT-003,maquinas,Taller Principal,Miller,Multiprocess 220,operativo
+

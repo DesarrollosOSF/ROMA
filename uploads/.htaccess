@@ -1,0 +1,9 @@
+# Protección de archivos subidos
+Options -Indexes
+
+# Permitir acceso solo a archivos específicos
+<FilesMatch "\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
+

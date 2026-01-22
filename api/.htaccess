@@ -1,0 +1,14 @@
+Options -MultiViews
+RewriteEngine On
+RewriteBase /api/
+
+# Permitir archivos/directorios existentes
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# /api/auth -> auth.php
+RewriteRule ^([a-zA-Z0-9_-]+)/?$ $1.php [QSA,L]
+
+# /api/auth/login -> auth.php/login
+RewriteRule ^([a-zA-Z0-9_-]+)/(.+)$ $1.php/$2 [QSA,L]
