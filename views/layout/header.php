@@ -102,6 +102,12 @@
                                    class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'ordenes' && isset($_GET['subaction']) && $_GET['subaction'] === 'cronograma') ? 'active' : ''; ?>">
                                 <i class="fas fa-calendar-alt"></i> Cronograma
                             </a></li>
+                            <?php if ($rol_actual === 'administrador'): ?>
+                            <li><a href="<?php echo BASE_URL; ?>index.php?action=ordenes&subaction=metricas"
+                                   class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'ordenes' && isset($_GET['subaction']) && $_GET['subaction'] === 'metricas') ? 'active' : ''; ?>">
+                                <i class="fas fa-chart-line"></i> Métricas / Informe
+                            </a></li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                 <?php endif; ?>

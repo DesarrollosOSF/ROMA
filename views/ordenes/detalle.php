@@ -224,6 +224,7 @@ require_once __DIR__ . '/../../models/Usuario.php';
 
     <!-- Sidebar -->
     <div class="col-md-4">
+        <?php $extensiones_imagen = ['jpg', 'jpeg', 'png', 'gif', 'webp']; ?>
         <!-- Acciones Rápidas -->
         <div class="card">
             <div class="card-header">
@@ -296,15 +297,26 @@ require_once __DIR__ . '/../../models/Usuario.php';
                 <h3><i class="fas fa-paperclip"></i> Archivos Adjuntos</h3>
             </div>
             <div class="card-body">
-                <ul class="attachments-list">
-                    <?php foreach ($orden['adjuntos'] as $adjunto): ?>
-                        <li>
-                            <a href="<?php echo BASE_URL . 'uploads/' . $adjunto['ruta_archivo']; ?>" 
-                               target="_blank" class="attachment-link">
-                                <i class="fas fa-file"></i>
-                                <?php echo htmlspecialchars($adjunto['nombre_archivo']); ?>
-                            </a>
-                            <small class="text-muted">
+                <ul class="attachments-list attachments-grid">
+                    <?php foreach ($orden['adjuntos'] as $adjunto): 
+                        $ext = strtolower(pathinfo($adjunto['nombre_archivo'], PATHINFO_EXTENSION));
+                        $es_imagen = in_array($ext, $extensiones_imagen);
+                        $url_archivo = BASE_URL . 'uploads/' . $adjunto['ruta_archivo'];
+                    ?>
+                        <li class="attachment-item">
+                            <?php if ($es_imagen): ?>
+                                <a href="<?php echo $url_archivo; ?>" class="attachment-link attachment-image-link" 
+                                   data-lightbox="adjuntos" data-title="<?php echo htmlspecialchars($adjunto['nombre_archivo']); ?>">
+                                    <img src="<?php echo $url_archivo; ?>" alt="<?php echo htmlspecialchars($adjunto['nombre_archivo']); ?>" class="attachment-thumb">
+                                    <span class="attachment-name"><?php echo htmlspecialchars($adjunto['nombre_archivo']); ?></span>
+                                </a>
+                            <?php else: ?>
+                                <a href="<?php echo $url_archivo; ?>" target="_blank" class="attachment-link attachment-file-link">
+                                    <span class="attachment-icon"><i class="fas fa-file-alt"></i></span>
+                                    <span class="attachment-name"><?php echo htmlspecialchars($adjunto['nombre_archivo']); ?></span>
+                                </a>
+                            <?php endif; ?>
+                            <small class="text-muted attachment-date">
                                 <?php echo date('d/m/Y', strtotime($adjunto['fecha_subida'])); ?>
                             </small>
                         </li>
@@ -390,13 +402,38 @@ require_once __DIR__ . '/../../models/Usuario.php';
                                         <br>
                                         <em><?php echo nl2br(htmlspecialchars($cambio['descripcion'])); ?></em>
                                     <?php endif; ?>
-                                    <?php if (!empty($cambio['ruta_evidencia'])): ?>
+                                    <?php if (!empty($cambio['ruta_evidencia'])): 
+                                        $url_evidencia = BASE_URL . 'uploads/' . $cambio['ruta_evidencia'];
+                                    ?>
                                         <div class="timeline-evidence">
-                                            <a href="<?php echo BASE_URL . 'uploads/' . $cambio['ruta_evidencia']; ?>" target="_blank">
-                                                <img src="<?php echo BASE_URL . 'uploads/' . $cambio['ruta_evidencia']; ?>" alt="Evidencia del cambio de estado">
+                                            <a href="<?php echo $url_evidencia; ?>" class="timeline-evidence-link" data-lightbox="historial" data-title="Evidencia">
+                                                <img src="<?php echo $url_evidencia; ?>" alt="Evidencia">
                                             </a>
                                         </div>
-                                    <?php endif; ?>
+                                    <?php elseif ($cambio['tipo_cambio'] === 'adjunto' && !empty($orden['adjuntos'])): 
+                                        $fecha_cambio_date = date('Y-m-d', strtotime($cambio['fecha_cambio']));
+                                        $adjuntos_ese_dia = array_filter($orden['adjuntos'], function($a) use ($fecha_cambio_date) {
+                                            return date('Y-m-d', strtotime($a['fecha_subida'])) === $fecha_cambio_date;
+                                        });
+                                        if (!empty($adjuntos_ese_dia)):
+                                    ?>
+                                        <div class="timeline-adjuntos-list">
+                                            <?php foreach ($adjuntos_ese_dia as $a): 
+                                                $ext = strtolower(pathinfo($a['nombre_archivo'], PATHINFO_EXTENSION));
+                                                $es_img = in_array($ext, $extensiones_imagen);
+                                                $url_a = BASE_URL . 'uploads/' . $a['ruta_archivo'];
+                                            ?>
+                                                <div class="timeline-adjunto-item">
+                                                    <?php if ($es_img): ?>
+                                                        <a href="<?php echo $url_a; ?>" class="timeline-evidence-link" data-lightbox="historial" data-title="<?php echo htmlspecialchars($a['nombre_archivo']); ?>">
+                                                            <img src="<?php echo $url_a; ?>" alt="<?php echo htmlspecialchars($a['nombre_archivo']); ?>" class="timeline-adjunto-thumb">
+                                                        </a>
+                                                    <?php endif; ?>
+                                                    <span class="timeline-adjunto-nombre"><i class="fas fa-file<?php echo $es_img ? '-image' : '-alt'; ?>"></i> <?php echo htmlspecialchars($a['nombre_archivo']); ?></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -405,6 +442,15 @@ require_once __DIR__ . '/../../models/Usuario.php';
             </div>
         </div>
         <?php endif; ?>
+    </div>
+</div>
+
+<!-- Modal Lightbox para imágenes -->
+<div class="modal modal-lightbox" id="modalLightbox" tabindex="-1">
+    <div class="lightbox-backdrop">
+        <button type="button" class="lightbox-close" aria-label="Cerrar">&times;</button>
+        <img src="" alt="" id="lightboxImage">
+        <div class="lightbox-caption" id="lightboxCaption"></div>
     </div>
 </div>
 
@@ -813,9 +859,165 @@ require_once __DIR__ . '/../../models/Usuario.php';
 
 .timeline-evidence img {
     max-width: 220px;
+    max-height: 160px;
+    object-fit: cover;
     border-radius: 0.5rem;
     border: 1px solid var(--border-color);
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.timeline-evidence img:hover {
+    opacity: 0.9;
+}
+
+.timeline-adjuntos-list {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.timeline-adjunto-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 140px;
+}
+
+.timeline-adjunto-thumb {
+    width: 80px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 0.35rem;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    margin-bottom: 0.25rem;
+}
+
+.timeline-adjunto-nombre {
+    font-size: 0.8rem;
+    word-break: break-word;
+    text-align: center;
+    color: var(--text-color);
+}
+
+.timeline-adjunto-nombre i {
+    margin-right: 0.25rem;
+    color: var(--primary-color);
+}
+
+/* Adjuntos: grid con miniatura y nombre */
+.attachments-list.attachments-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.attachments-list .attachment-item {
+    margin: 0;
+    padding: 0;
+}
+
+.attachment-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background: var(--light-color);
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.attachment-link:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.attachment-thumb {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+
+.attachment-name {
+    font-size: 0.85rem;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.attachment-icon {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.attachment-date {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+}
+
+/* Lightbox */
+.modal-lightbox .lightbox-backdrop {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    max-width: 95vw;
+    max-height: 95vh;
+    padding: 2rem;
+}
+
+.modal-lightbox .lightbox-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    z-index: 10;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.75rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.modal-lightbox .lightbox-close:hover {
+    background: rgba(0,0,0,0.8);
+}
+
+#lightboxImage {
+    max-width: 90vw;
+    max-height: 85vh;
+    object-fit: contain;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.lightbox-caption {
+    margin-top: 0.75rem;
+    color: white;
+    text-align: center;
+    font-size: 0.9rem;
 }
 </style>
 
@@ -878,6 +1080,43 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+
+    // Lightbox para imágenes (adjuntos e historial)
+    var lightboxModal = document.getElementById('modalLightbox');
+    var lightboxImg = document.getElementById('lightboxImage');
+    var lightboxCaption = document.getElementById('lightboxCaption');
+    var lightboxClose = lightboxModal ? lightboxModal.querySelector('.lightbox-close') : null;
+
+    function openLightbox(src, title) {
+        if (!lightboxModal || !lightboxImg) return;
+        lightboxImg.src = src;
+        lightboxImg.alt = title || '';
+        if (lightboxCaption) lightboxCaption.textContent = title || '';
+        lightboxModal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+        if (!lightboxModal) return;
+        lightboxModal.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    document.querySelectorAll('.attachment-image-link, .timeline-evidence-link').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            var href = this.getAttribute('href');
+            var title = this.getAttribute('data-title') || (this.querySelector('img') && this.querySelector('img').alt) || '';
+            openLightbox(href, title);
+        });
+    });
+
+    if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+    if (lightboxModal) {
+        lightboxModal.addEventListener('click', function(e) {
+            if (e.target === lightboxModal) closeLightbox();
+        });
+    }
 
     const selectEstado = document.getElementById('selectNuevoEstado');
     const evidenciaWrapper = document.getElementById('evidenciaFinalizacionWrapper');

@@ -78,6 +78,9 @@ class OrdenTrabajo {
         if (!empty($filtros['estado'])) {
             $query .= " AND ot.estado_proceso = :estado";
             $params[':estado'] = $filtros['estado'];
+        } elseif (!empty($filtros['excluir_finalizado_por_defecto'])) {
+            // Solo en la web: por defecto no mostrar órdenes finalizadas
+            $query .= " AND ot.estado_proceso != 'finalizado'";
         }
 
         if (!empty($filtros['tipo_mantenimiento'])) {
@@ -125,15 +128,25 @@ class OrdenTrabajo {
             $params[':busqueda3'] = $busqueda;
         }
 
+        // Prioridad: fecha límite más cercana primero, luego criticidad, luego creación
         $query .= " ORDER BY 
+                    (ot.fecha_limite_ejecucion IS NULL),
+                    ot.fecha_limite_ejecucion ASC,
                     CASE ot.nivel_criticidad 
                         WHEN 'critica' THEN 1
                         WHEN 'alta' THEN 2
                         WHEN 'normal' THEN 3
                         WHEN 'baja' THEN 4
+                        ELSE 5
                     END,
-                    ot.fecha_limite_ejecucion ASC,
                     ot.fecha_creacion DESC";
+
+        if (isset($filtros['limit']) && (int)$filtros['limit'] > 0) {
+            $query .= " LIMIT " . (int)$filtros['limit'];
+            if (isset($filtros['offset']) && (int)$filtros['offset'] >= 0) {
+                $query .= " OFFSET " . (int)$filtros['offset'];
+            }
+        }
 
         $stmt = $this->conn->prepare($query);
         foreach ($params as $key => $value) {
@@ -142,6 +155,175 @@ class OrdenTrabajo {
         $stmt->execute();
 
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Contar órdenes con los mismos filtros que listar() (sin paginación)
+     */
+    public function contar($filtros = []) {
+        $query = "SELECT COUNT(*) as total
+                  FROM " . $this->table . " ot
+                  LEFT JOIN activos a ON ot.id_activo = a.id_activo
+                  LEFT JOIN usuarios u_solicitante ON ot.id_solicitante = u_solicitante.id_usuario
+                  LEFT JOIN usuarios u_asignado ON ot.id_usuario_asignado = u_asignado.id_usuario
+                  WHERE ot.activo = 1";
+
+        $params = [];
+
+        if (!empty($filtros['estado'])) {
+            $query .= " AND ot.estado_proceso = :estado";
+            $params[':estado'] = $filtros['estado'];
+        } elseif (!empty($filtros['excluir_finalizado_por_defecto'])) {
+            $query .= " AND ot.estado_proceso != 'finalizado'";
+        }
+
+        if (!empty($filtros['tipo_mantenimiento'])) {
+            $query .= " AND ot.tipo_mantenimiento = :tipo";
+            $params[':tipo'] = $filtros['tipo_mantenimiento'];
+        }
+
+        if (!empty($filtros['criticidad'])) {
+            $query .= " AND ot.nivel_criticidad = :criticidad";
+            $params[':criticidad'] = $filtros['criticidad'];
+        }
+
+        if (!empty($filtros['asignado_a'])) {
+            $query .= " AND ot.id_usuario_asignado = :asignado";
+            $params[':asignado'] = $filtros['asignado_a'];
+        }
+
+        if (!empty($filtros['solicitante'])) {
+            $query .= " AND ot.id_solicitante = :solicitante";
+            $params[':solicitante'] = $filtros['solicitante'];
+        }
+
+        if (!empty($filtros['activo'])) {
+            $query .= " AND ot.id_activo = :activo";
+            $params[':activo'] = $filtros['activo'];
+        }
+
+        if (!empty($filtros['fecha_desde'])) {
+            $query .= " AND ot.fecha_limite_ejecucion >= :fecha_desde";
+            $params[':fecha_desde'] = $filtros['fecha_desde'];
+        }
+
+        if (!empty($filtros['fecha_hasta'])) {
+            $query .= " AND ot.fecha_limite_ejecucion <= :fecha_hasta";
+            $params[':fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+
+        if (!empty($filtros['busqueda'])) {
+            $busqueda = '%' . $filtros['busqueda'] . '%';
+            $query .= " AND (ot.numero_radicado LIKE :busqueda1 
+                      OR ot.descripcion_corta LIKE :busqueda2
+                      OR a.nombre_activo LIKE :busqueda3)";
+            $params[':busqueda1'] = $busqueda;
+            $params[':busqueda2'] = $busqueda;
+            $params[':busqueda3'] = $busqueda;
+        }
+
+        $stmt = $this->conn->prepare($query);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        $row = $stmt->fetch();
+        return (int)($row['total'] ?? 0);
+    }
+
+    /**
+     * Obtener métricas resumidas para el dashboard de órdenes (con filtros por rol).
+     * Retorna: en_proceso, finalizadas, criticas, atrasadas, recibido, rechazado, total_activas.
+     */
+    public function obtenerMetricasResumen($filtros = []) {
+        $base = "SELECT 
+            SUM(CASE WHEN ot.estado_proceso = 'en_proceso' THEN 1 ELSE 0 END) AS en_proceso,
+            SUM(CASE WHEN ot.estado_proceso = 'finalizado' THEN 1 ELSE 0 END) AS finalizadas,
+            SUM(CASE WHEN ot.nivel_criticidad = 'critica' AND ot.estado_proceso != 'finalizado' THEN 1 ELSE 0 END) AS criticas,
+            SUM(CASE WHEN ot.fecha_limite_ejecucion < CURDATE() AND ot.estado_proceso NOT IN ('finalizado','rechazado') THEN 1 ELSE 0 END) AS atrasadas,
+            SUM(CASE WHEN ot.estado_proceso = 'recibido' THEN 1 ELSE 0 END) AS recibido,
+            SUM(CASE WHEN ot.estado_proceso = 'rechazado' THEN 1 ELSE 0 END) AS rechazado,
+            SUM(CASE WHEN ot.estado_proceso IN ('recibido','en_proceso') THEN 1 ELSE 0 END) AS total_activas
+            FROM " . $this->table . " ot
+            LEFT JOIN activos a ON ot.id_activo = a.id_activo
+            WHERE ot.activo = 1";
+        $params = [];
+        if (!empty($filtros['asignado_a'])) {
+            $base .= " AND ot.id_usuario_asignado = :asignado";
+            $params[':asignado'] = $filtros['asignado_a'];
+        }
+        if (!empty($filtros['solicitante'])) {
+            $base .= " AND ot.id_solicitante = :solicitante";
+            $params[':solicitante'] = $filtros['solicitante'];
+        }
+        $stmt = $this->conn->prepare($base);
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return [
+            'en_proceso' => (int)($row['en_proceso'] ?? 0),
+            'finalizadas' => (int)($row['finalizadas'] ?? 0),
+            'criticas' => (int)($row['criticas'] ?? 0),
+            'atrasadas' => (int)($row['atrasadas'] ?? 0),
+            'recibido' => (int)($row['recibido'] ?? 0),
+            'rechazado' => (int)($row['rechazado'] ?? 0),
+            'total_activas' => (int)($row['total_activas'] ?? 0),
+        ];
+    }
+
+    /**
+     * Obtener datos para informe de tiempos de finalización (órdenes finalizadas).
+     * Incluye fecha_creacion, fecha_limite_ejecucion, fecha_finalizacion (desde historial).
+     */
+    public function obtenerDatosTiemposFinalizacion($filtros = []) {
+        $query = "SELECT ot.id_orden, ot.numero_radicado, ot.fecha_creacion, ot.fecha_limite_ejecucion, ot.fecha_actualizacion,
+                  (SELECT MIN(h.fecha_cambio) FROM ordenes_historial h 
+                   WHERE h.id_orden = ot.id_orden AND h.tipo_cambio = 'estado' AND h.valor_nuevo = 'finalizado') AS fecha_finalizacion
+                  FROM " . $this->table . " ot
+                  WHERE ot.activo = 1 AND ot.estado_proceso = 'finalizado'";
+        $params = [];
+        if (!empty($filtros['asignado_a'])) {
+            $query .= " AND ot.id_usuario_asignado = :asignado";
+            $params[':asignado'] = $filtros['asignado_a'];
+        }
+        if (!empty($filtros['solicitante'])) {
+            $query .= " AND ot.id_solicitante = :solicitante";
+            $params[':solicitante'] = $filtros['solicitante'];
+        }
+        $query .= " ORDER BY ot.fecha_creacion DESC";
+        $stmt = $this->conn->prepare($query);
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Obtener carga de trabajo por operario (usuarios con rol operario).
+     * Incluye operarios con 0 órdenes. Retorna: id_usuario, nombre, email, total_activas, en_proceso, recibido, finalizadas, atrasadas, criticas.
+     */
+    public function obtenerCargaPorOperario() {
+        $query = "SELECT 
+                    u.id_usuario,
+                    u.nombre,
+                    u.email,
+                    COALESCE(SUM(CASE WHEN ot.estado_proceso IN ('recibido','en_proceso') THEN 1 ELSE 0 END), 0) AS total_activas,
+                    COALESCE(SUM(CASE WHEN ot.estado_proceso = 'en_proceso' THEN 1 ELSE 0 END), 0) AS en_proceso,
+                    COALESCE(SUM(CASE WHEN ot.estado_proceso = 'recibido' THEN 1 ELSE 0 END), 0) AS recibido,
+                    COALESCE(SUM(CASE WHEN ot.estado_proceso = 'finalizado' THEN 1 ELSE 0 END), 0) AS finalizadas,
+                    COALESCE(SUM(CASE WHEN ot.fecha_limite_ejecucion < CURDATE() AND ot.estado_proceso NOT IN ('finalizado','rechazado') THEN 1 ELSE 0 END), 0) AS atrasadas,
+                    COALESCE(SUM(CASE WHEN ot.nivel_criticidad = 'critica' AND ot.estado_proceso != 'finalizado' THEN 1 ELSE 0 END), 0) AS criticas
+                  FROM usuarios u
+                  LEFT JOIN " . $this->table . " ot ON ot.id_usuario_asignado = u.id_usuario AND ot.activo = 1
+                  WHERE u.rol = 'operario' AND u.activo = 1
+                  GROUP BY u.id_usuario, u.nombre, u.email
+                  ORDER BY total_activas DESC, atrasadas DESC, u.nombre ASC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

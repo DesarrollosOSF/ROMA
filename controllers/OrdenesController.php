@@ -38,14 +38,19 @@ class OrdenesController {
         $rol = $_SESSION['usuario_rol'] ?? '';
         $usuario_id = $_SESSION['usuario_id'] ?? null;
 
+        $estado_get = isset($_GET['estado']) ? (string)$_GET['estado'] : '';
         $filtros = [
-            'estado' => $_GET['estado'] ?? '',
+            'estado' => $estado_get,
             'tipo_mantenimiento' => $_GET['tipo'] ?? '',
             'criticidad' => $_GET['criticidad'] ?? '',
             'asignado_a' => $_GET['asignado'] ?? '',
             'activo' => $_GET['activo'] ?? '',
             'busqueda' => $_GET['busqueda'] ?? ''
         ];
+        // En la web: por defecto no mostrar órdenes finalizadas (solo si el usuario filtra por "Finalizado")
+        if ($estado_get === '') {
+            $filtros['excluir_finalizado_por_defecto'] = true;
+        }
 
         // Si es operario, solo ver sus órdenes asignadas
         if ($rol === 'operario') {
@@ -56,6 +61,27 @@ class OrdenesController {
         if (in_array($rol, ['jefe', 'director'])) {
             $filtros['solicitante'] = $usuario_id;
         }
+
+        // Paginación
+        $registros_por_pagina = (int)($_GET['por_pagina'] ?? 25);
+        if ($registros_por_pagina < 5) {
+            $registros_por_pagina = 25;
+        }
+        if ($registros_por_pagina > 100) {
+            $registros_por_pagina = 100;
+        }
+        $total_ordenes = $this->orden->contar($filtros);
+        $total_paginas = max(1, (int)ceil($total_ordenes / $registros_por_pagina));
+        $pagina_actual = (int)($_GET['pagina'] ?? 1);
+        if ($pagina_actual < 1) {
+            $pagina_actual = 1;
+        }
+        if ($pagina_actual > $total_paginas) {
+            $pagina_actual = $total_paginas;
+        }
+        $offset = ($pagina_actual - 1) * $registros_por_pagina;
+        $filtros['limit'] = $registros_por_pagina;
+        $filtros['offset'] = $offset;
 
         $ordenes = $this->orden->listar($filtros);
         $activos = $this->activo->listar();
@@ -72,6 +98,16 @@ class OrdenesController {
      * Mostrar formulario de nueva orden
      */
     public function crear() {
+        $rol = $_SESSION['usuario_rol'] ?? '';
+        
+        // Verificar permiso para crear órdenes
+        if (!Usuario::tienePermiso($rol, 'crear_ordenes')) {
+            $_SESSION['mensaje'] = 'No tiene permisos para crear órdenes de trabajo';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes');
+            exit;
+        }
+        
         try {
             $orden = []; // Inicializar orden vacío para nueva orden
             
@@ -251,6 +287,18 @@ class OrdenesController {
                         $file_size,
                         $id_usuario
                     );
+                    $es_imagen = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+                    $this->orden->registrarHistorial(
+                        $id_orden,
+                        $id_usuario,
+                        'adjunto',
+                        null,
+                        null,
+                        null,
+                        null,
+                        'Archivo adjunto: ' . $original_name,
+                        $es_imagen ? $ruta_relativa : null
+                    );
                 }
             }
         }
@@ -394,10 +442,9 @@ class OrdenesController {
                 $this->orden->registrarHistorial($id, $id_usuario, 'edicion', 'nivel_criticidad', $orden_actual['nivel_criticidad'], 'nivel_criticidad', $this->orden->nivel_criticidad, 'Criticidad actualizada');
             }
             
-            // Procesar nuevos adjuntos si existen
+            // Procesar nuevos adjuntos si existen (el historial se registra por archivo en procesarAdjuntos)
             if (!empty($_FILES['adjuntos']['name'][0])) {
                 $this->procesarAdjuntos($id);
-                $this->orden->registrarHistorial($id, $id_usuario, 'adjunto', null, null, null, null, 'Archivos adjuntos agregados');
             }
             
             $_SESSION['mensaje'] = 'Orden de trabajo actualizada correctamente';
@@ -780,6 +827,129 @@ class OrdenesController {
         $criticidades = CRITICITY_LEVELS;
 
         require_once __DIR__ . '/../views/ordenes/cronograma.php';
+    }
+
+    /**
+     * Página de métricas e informe de órdenes de trabajo (solo Administrador)
+     */
+    public function metricas() {
+        $rol = $_SESSION['usuario_rol'] ?? '';
+        if ($rol !== 'administrador') {
+            $_SESSION['mensaje'] = 'Solo el administrador puede acceder al informe de métricas.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes');
+            exit;
+        }
+
+        $usuario_id = $_SESSION['usuario_id'] ?? null;
+        $filtros = [];
+        if ($rol === 'operario') {
+            $filtros['asignado_a'] = $usuario_id;
+        }
+        if (in_array($rol, ['jefe', 'director'])) {
+            $filtros['solicitante'] = $usuario_id;
+        }
+
+        $metricas = $this->orden->obtenerMetricasResumen($filtros);
+        $datos_tiempos = $this->orden->obtenerDatosTiemposFinalizacion($filtros);
+
+        // Calcular indicadores de tiempo de finalización y resumen por rangos de retraso
+        $informe_tiempos = [
+            'total_finalizadas' => 0,
+            'cumplieron_plazo' => 0,
+            'promedio_dias_estimados' => 0,
+            'promedio_dias_reales' => 0,
+            'promedio_dias_retraso' => 0,
+            'porcentaje_cumplimiento' => 0,
+            'resumen_retraso' => [
+                'a_tiempo' => 0,
+                'retraso_1_3' => 0,
+                'retraso_4_7' => 0,
+                'retraso_8_14' => 0,
+                'retraso_mas_14' => 0,
+            ],
+            'muestra' => [] // Últimas 20 para vista previa
+        ];
+
+        $suma_estimados = 0;
+        $suma_reales = 0;
+        $suma_retraso = 0;
+        $con_estimado = 0;
+        $con_finalizacion = 0;
+        $con_ambos = 0;
+        $cumplieron = 0;
+        $detalle_para_muestra = [];
+
+        foreach ($datos_tiempos as $row) {
+            $informe_tiempos['total_finalizadas']++;
+            $fecha_creacion = $row['fecha_creacion'] ? strtotime($row['fecha_creacion']) : null;
+            $fecha_limite = $row['fecha_limite_ejecucion'] ? strtotime($row['fecha_limite_ejecucion']) : null;
+            $fecha_fin = !empty($row['fecha_finalizacion']) ? strtotime($row['fecha_finalizacion']) : ($row['fecha_actualizacion'] ? strtotime($row['fecha_actualizacion']) : null);
+
+            $dias_estimados = null;
+            $dias_reales = null;
+            $dias_retraso = null;
+            $cumplio = null;
+
+            if ($fecha_creacion && $fecha_limite) {
+                $dias_estimados = max(0, round(($fecha_limite - $fecha_creacion) / 86400));
+                $con_estimado++;
+                $suma_estimados += $dias_estimados;
+            }
+            if ($fecha_creacion && $fecha_fin) {
+                $dias_reales = max(0, round(($fecha_fin - $fecha_creacion) / 86400));
+                $con_finalizacion++;
+                $suma_reales += $dias_reales;
+                if ($dias_estimados !== null) {
+                    $con_ambos++;
+                    $dias_retraso = $dias_reales - $dias_estimados;
+                    $cumplio = $dias_retraso <= 0;
+                    if ($cumplio) {
+                        $cumplieron++;
+                        $informe_tiempos['resumen_retraso']['a_tiempo']++;
+                    } else {
+                        $d = (int) $dias_retraso;
+                        if ($d <= 3) $informe_tiempos['resumen_retraso']['retraso_1_3']++;
+                        elseif ($d <= 7) $informe_tiempos['resumen_retraso']['retraso_4_7']++;
+                        elseif ($d <= 14) $informe_tiempos['resumen_retraso']['retraso_8_14']++;
+                        else $informe_tiempos['resumen_retraso']['retraso_mas_14']++;
+                    }
+                    $suma_retraso += max(0, $dias_retraso);
+                }
+            }
+
+            $detalle_para_muestra[] = [
+                'numero_radicado' => $row['numero_radicado'],
+                'dias_estimados' => $dias_estimados,
+                'dias_reales' => $dias_reales,
+                'dias_retraso' => $dias_retraso,
+                'cumplio_plazo' => $cumplio,
+            ];
+        }
+
+        $informe_tiempos['muestra'] = array_slice($detalle_para_muestra, 0, 20);
+
+        if ($con_estimado > 0) {
+            $informe_tiempos['promedio_dias_estimados'] = round($suma_estimados / $con_estimado, 1);
+        }
+        if ($con_finalizacion > 0) {
+            $informe_tiempos['promedio_dias_reales'] = round($suma_reales / $con_finalizacion, 1);
+        }
+        if ($con_ambos > 0) {
+            $informe_tiempos['promedio_dias_retraso'] = round($suma_retraso / $con_ambos, 1);
+            $informe_tiempos['porcentaje_cumplimiento'] = round(($cumplieron / $con_ambos) * 100, 1);
+        }
+        $informe_tiempos['cumplieron_plazo'] = $cumplieron;
+        if ($informe_tiempos['total_finalizadas'] > 0 && $con_ambos == 0) {
+            $informe_tiempos['porcentaje_cumplimiento'] = 100;
+        }
+
+        // Carga de trabajo por operario (para evaluación y balanceo)
+        $carga_operarios = $this->orden->obtenerCargaPorOperario();
+
+        $estados = ORDER_STATES;
+        $criticidades = CRITICITY_LEVELS;
+        require_once __DIR__ . '/../views/ordenes/metricas.php';
     }
     
     /**

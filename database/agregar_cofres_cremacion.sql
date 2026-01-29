@@ -13,4 +13,4 @@ MODIFY COLUMN categoria ENUM(
     'planta_agua_residual',
     'cofres_cremacion'
 ) NOT NULL;
-
+    

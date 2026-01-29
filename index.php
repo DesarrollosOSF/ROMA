@@ -230,6 +230,9 @@ try {
                 case 'cronograma':
                     $controller->cronograma();
                     break;
+                case 'metricas':
+                    $controller->metricas();
+                    break;
                 case 'actualizar_asignacion':
                     $controller->actualizarAsignacion();
                     break;

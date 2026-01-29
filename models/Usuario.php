@@ -253,7 +253,7 @@ class Usuario {
                 'eliminar_activos' => false,
                 'ver_ordenes' => true,
                 'ver_mis_ordenes' => true, // Solo las asignadas a él
-                'crear_ordenes' => false,
+                'crear_ordenes' => true, // Puede crear órdenes
                 'editar_ordenes' => false, // No puede editar
                 'eliminar_ordenes' => false, // No puede eliminar
                 'cambiar_estado_orden' => true, // Puede cambiar estado
