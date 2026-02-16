@@ -124,7 +124,10 @@ if (empty($solicitante_email)) {
 
                 <div class="form-group">
                     <label for="id_activo">Activo Asociado <span class="text-danger">*</span></label>
-                    <select id="id_activo" name="id_activo" required class="form-control" <?php echo (!$is_editing) ? 'disabled' : ''; ?>>
+                    <?php if ($is_editing && !empty($orden['id_activo'])): ?>
+                        <input type="hidden" name="id_activo" value="<?php echo (int)$orden['id_activo']; ?>">
+                    <?php endif; ?>
+                    <select id="id_activo" name="<?php echo $is_editing ? 'id_activo_display' : 'id_activo'; ?>" required class="form-control" <?php echo (!$is_editing) ? 'disabled' : ''; ?>>
                         <option value=""><?php echo (!$is_editing) ? 'Seleccione primero una ruta' : 'Seleccione un activo'; ?></option>
                         <?php if ($is_editing && !empty($activos)): ?>
                             <?php foreach ($activos as $activo): ?>

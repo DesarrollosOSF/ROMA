@@ -412,8 +412,27 @@ class OrdenesController {
         
         $id_usuario = $_SESSION['usuario_id'] ?? 1;
         
+        // id_activo: no puede ser vacío (FK y NOT NULL). Si no viene en POST (ej. select deshabilitado al editar), conservar el actual.
+        $id_activo = isset($_POST['id_activo']) && $_POST['id_activo'] !== '' ? (int)$_POST['id_activo'] : null;
+        if ($id_activo === null || $id_activo <= 0) {
+            $id_activo = (int)$orden_actual['id_activo'];
+        }
+        if ($id_activo <= 0) {
+            $_SESSION['mensaje'] = 'Debe seleccionar un activo asociado válido.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=editar&id=' . $id);
+            exit;
+        }
+        $activo_existe = $this->activo->obtenerPorId($id_activo);
+        if (!$activo_existe) {
+            $_SESSION['mensaje'] = 'El activo seleccionado no existe o fue dado de baja. Elija otro activo.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=editar&id=' . $id);
+            exit;
+        }
+        
         $this->orden->id_orden = $id;
-        $this->orden->id_activo = $_POST['id_activo'] ?? null;
+        $this->orden->id_activo = $id_activo;
         $this->orden->id_usuario_asignado = $_POST['id_usuario_asignado'] ?? null;
         $this->orden->tipo_mantenimiento = $_POST['tipo_mantenimiento'] ?? 'correctivo';
         $this->orden->nivel_criticidad = $_POST['nivel_criticidad'] ?? 'normal';
