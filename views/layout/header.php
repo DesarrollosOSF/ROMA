@@ -53,7 +53,7 @@
                 // Mostrar Activos para todos los roles (administrador siempre, operario puede ver)
                 $rol_actual = $_SESSION['usuario_rol'] ?? '';
                 $mostrar_activos = false;
-                if ($rol_actual === 'administrador') {
+                if (Usuario::esAdminGeneral($rol_actual)) {
                     $mostrar_activos = true;
                 } elseif (Usuario::tienePermiso($rol_actual, 'ver_lista_activos')) {
                     $mostrar_activos = true;
@@ -79,10 +79,47 @@
                             <i class="fas fa-file-upload"></i> Carga Masiva
                         </a></li>
                         <?php endif; ?>
+                        <?php if (Usuario::esAdminGeneral($rol_actual)): ?>
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=activos&subaction=auditoria">
+                            <i class="fas fa-shield-alt"></i> Auditoría
+                        </a></li>
+                        <?php endif; ?>
                     </ul>
                 </li>
                 <?php endif; ?>
-                <?php if (isset($_SESSION['usuario_rol']) && in_array($_SESSION['usuario_rol'], ['administrador', 'jefe', 'director', 'operario'])): ?>
+                <?php if (Usuario::tienePermiso($rol_actual, 'ver_nuevos_activos') || $rol_actual === 'administrador'): ?>
+                <li class="nav-item-dropdown">
+                    <a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos"
+                       class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'nuevos_activos') ? 'active' : ''; ?>">
+                        <i class="fas fa-boxes"></i> Nuevos Activos
+                        <i class="fas fa-chevron-down dropdown-icon"></i>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos">
+                            <i class="fas fa-chart-pie"></i> Panel General
+                        </a></li>
+                        <?php if (Usuario::tienePermiso($rol_actual, 'crear_nuevos_activos')): ?>
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=crear">
+                            <i class="fas fa-plus-circle"></i> Nuevo Activo
+                        </a></li>
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=carga_masiva">
+                            <i class="fas fa-file-upload"></i> Carga Masiva
+                        </a></li>
+                        <?php endif; ?>
+                        <?php if (Usuario::tienePermiso($rol_actual, 'generar_formato_nuevos')): ?>
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=formato">
+                            <i class="fas fa-file-pdf"></i> Formato Inventario
+                        </a></li>
+                        <?php endif; ?>
+                        <?php if (Usuario::esAdminGeneral($rol_actual)): ?>
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=auditoria">
+                            <i class="fas fa-shield-alt"></i> Auditoría
+                        </a></li>
+                        <?php endif; ?>
+                    </ul>
+                </li>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['usuario_rol']) && in_array($_SESSION['usuario_rol'], ['administrador', 'superadmin', 'jefe', 'director', 'operario'])): ?>
                     <li class="nav-item-dropdown">
                         <a href="<?php echo BASE_URL; ?>index.php?action=ordenes" 
                            class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'ordenes' && (!isset($_GET['subaction']) || $_GET['subaction'] === 'index')) ? 'active' : ''; ?>">
@@ -93,6 +130,10 @@
                             <li><a href="<?php echo BASE_URL; ?>index.php?action=ordenes">
                                 <i class="fas fa-clipboard-list"></i> Lista de Órdenes
                             </a></li>
+                            <li><a href="<?php echo BASE_URL; ?>index.php?action=ordenes&subaction=informe"
+                                   class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'ordenes' && isset($_GET['subaction']) && $_GET['subaction'] === 'informe') ? 'active' : ''; ?>">
+                                <i class="fas fa-file-alt"></i> Informe por Creador
+                            </a></li>
                             <?php if (Usuario::tienePermiso($rol_actual, 'crear_ordenes')): ?>
                             <li><a href="<?php echo BASE_URL; ?>index.php?action=ordenes&subaction=crear">
                                 <i class="fas fa-plus-square"></i> Nueva Orden
@@ -102,7 +143,7 @@
                                    class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'ordenes' && isset($_GET['subaction']) && $_GET['subaction'] === 'cronograma') ? 'active' : ''; ?>">
                                 <i class="fas fa-calendar-alt"></i> Cronograma
                             </a></li>
-                            <?php if ($rol_actual === 'administrador'): ?>
+                            <?php if (Usuario::esAdminGeneral($rol_actual)): ?>
                             <li><a href="<?php echo BASE_URL; ?>index.php?action=ordenes&subaction=metricas"
                                    class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'ordenes' && isset($_GET['subaction']) && $_GET['subaction'] === 'metricas') ? 'active' : ''; ?>">
                                 <i class="fas fa-chart-line"></i> Métricas / Informe
@@ -116,10 +157,10 @@
                         <i class="fas fa-file-alt"></i> Solicitudes
                     </a></li>
                 <?php endif; ?>
-                <?php if (isset($_SESSION['usuario_rol']) && $_SESSION['usuario_rol'] === 'administrador'): ?>
+                <?php if (isset($_SESSION['usuario_rol']) && Usuario::esAdminGeneral($_SESSION['usuario_rol'])): ?>
                     <li class="nav-item-dropdown">
-                        <a href="<?php echo BASE_URL; ?>index.php?action=usuarios" 
-                           class="<?php echo (isset($_GET['action']) && $_GET['action'] === 'usuarios') ? 'active' : ''; ?>">
+                        <a href="<?php echo BASE_URL; ?>index.php?action=usuarios"
+                           class="<?php echo (isset($_GET['action']) && in_array($_GET['action'], ['usuarios', 'responsables'], true)) ? 'active' : ''; ?>">
                             <i class="fas fa-users"></i> Usuarios
                             <i class="fas fa-chevron-down dropdown-icon"></i>
                         </a>
@@ -130,6 +171,11 @@
                             <li><a href="<?php echo BASE_URL; ?>index.php?action=usuarios&subaction=crear">
                                 <i class="fas fa-user-plus"></i> Nuevo Usuario
                             </a></li>
+                            <?php if (Usuario::tienePermiso($rol_actual, 'ver_responsables')): ?>
+                            <li><a href="<?php echo BASE_URL; ?>index.php?action=responsables">
+                                <i class="fas fa-id-card"></i> Responsables de Activos
+                            </a></li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                     <li><a href="<?php echo BASE_URL; ?>index.php?action=configuracion" 

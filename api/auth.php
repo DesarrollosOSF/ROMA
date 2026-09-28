@@ -26,7 +26,7 @@ if ($recurso !== 'auth') {
 /**
  * Construye arreglo de permisos disponibles para el rol entregado.
  */
-function construirPermisosPorRol(string $rol): array
+function construirPermisosPorRol(string $rol, ?string $email = null): array
 {
     $accionesInteres = [
         'ver_activos',
@@ -50,7 +50,7 @@ function construirPermisosPorRol(string $rol): array
 
     $permisos = [];
     foreach ($accionesInteres as $accion) {
-        $permisos[$accion] = Usuario::tienePermiso($rol, $accion);
+        $permisos[$accion] = Usuario::tienePermiso($rol, $accion, $email);
     }
 
     return $permisos;
@@ -99,7 +99,7 @@ try {
                         'cargo' => $detalle['cargo'] ?? null,
                         'area' => $detalle['area'] ?? null,
                         'fecha_creacion' => $detalle['fecha_creacion'] ?? null,
-                        'permisos' => construirPermisosPorRol($detalle['rol']),
+                        'permisos' => construirPermisosPorRol($detalle['rol'], $detalle['email'] ?? null),
                     ]
                 ], 'Autenticación exitosa');
             }
@@ -125,7 +125,7 @@ try {
                     'cargo' => $usuario['cargo'] ?? null,
                     'area' => $usuario['area'] ?? null,
                     'fecha_creacion' => $usuario['fecha_creacion'] ?? null,
-                    'permisos' => construirPermisosPorRol($usuario['rol']),
+                    'permisos' => construirPermisosPorRol($usuario['rol'], $usuario['email'] ?? null),
                 ], 'Perfil obtenido correctamente');
             }
 

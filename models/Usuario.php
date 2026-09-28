@@ -105,6 +105,21 @@ class Usuario {
     }
 
     /**
+     * Verificar si el rol es super administrador
+     */
+    public static function esSuperAdmin($rol) {
+        return ($rol ?? '') === 'superadmin';
+    }
+
+    /**
+     * Alcance administrativo general (administrador o super administrador).
+     * Úsese para secciones administrativas compartidas (auditorías, métricas).
+     */
+    public static function esAdminGeneral($rol) {
+        return in_array($rol ?? '', ['administrador', 'superadmin'], true);
+    }
+
+    /**
      * Obtener todos los usuarios
      */
     public function listar($filtros = []) {
@@ -123,9 +138,9 @@ class Usuario {
             if (!empty($filtros['activo'])) {
                 $query .= " AND activo = :activo";
                 $params[':activo'] = $filtros['activo'];
-            } else {
+            } /*else {
                 $query .= " AND activo = 1";
-            }
+            }*/
 
             if (!empty($filtros['busqueda'])) {
                 $busqueda = '%' . $filtros['busqueda'] . '%';
@@ -180,15 +195,72 @@ class Usuario {
     }
 
     /**
-     * Verificar permisos según rol
+     * Operarios con permiso excepcional para crear órdenes,
+     * limitados a rutas específicas (clave de ASSET_CATEGORIES).
      */
-    public static function tienePermiso($rol, $accion) {
+    public static function excepcionesCrearOrdenes(): array
+    {
+        return [
+            'miguel.rico@osf.com.co' => ['cofres_cremacion'],
+        ];
+    }
+
+    /**
+     * Rutas permitidas al crear órdenes para un email con excepción.
+     * null = sin restricción (permiso normal del rol).
+     */
+    public static function rutasRestringidasCrearOrdenes(?string $email = null): ?array
+    {
+        $email = strtolower(trim($email ?? ($_SESSION['usuario_email'] ?? '')));
+        $excepciones = self::excepcionesCrearOrdenes();
+
+        return $excepciones[$email] ?? null;
+    }
+
+    /**
+     * Verificar permisos según rol.
+     * $email opcional: permite excepciones por usuario (p. ej. crear_ordenes).
+     */
+    public static function tienePermiso($rol, $accion, $email = null) {
         $permisos = [
             'administrador' => [
                 'ver_activos' => true,
                 'crear_activos' => true,
                 'editar_activos' => true,
                 'eliminar_activos' => true,
+                'ver_auditoria' => true,
+                'ver_nuevos_activos' => true,
+                'generar_formato_nuevos' => true,
+                'ver_responsables' => true,
+                'ver_ordenes' => true,
+                'crear_ordenes' => true,
+                'asignar_ordenes' => true,
+                'editar_ordenes' => true,
+                'eliminar_ordenes' => true,
+                'cambiar_estado_orden' => true,
+                'reasignar_orden' => true,
+                'ver_solicitudes' => true,
+                'asignar_solicitudes' => true,
+                'rechazar_solicitudes' => true,
+                'ver_repuestos' => true,
+                'gestionar_repuestos' => true,
+                'ver_reportes' => true,
+                'gestionar_usuarios' => true,
+                'configurar_sistema' => true
+            ],
+            'superadmin' => [
+                'ver_activos' => true,
+                'crear_activos' => true,
+                'editar_activos' => true,
+                'eliminar_activos' => true,
+                'ver_auditoria' => true,
+                'ver_nuevos_activos' => true,
+                'crear_nuevos_activos' => true,
+                'editar_nuevos_activos' => true,
+                'eliminar_nuevos_activos' => true,
+                'generar_formato_nuevos' => true,
+                'ver_responsables' => true,
+                'gestionar_responsables' => true,
                 'ver_ordenes' => true,
                 'crear_ordenes' => true,
                 'asignar_ordenes' => true,
@@ -208,6 +280,7 @@ class Usuario {
             'jefe' => [
                 'ver_activos' => false, // No puede ver lista, pero puede seleccionarlos al crear orden
                 'ver_lista_activos' => false,
+                'ver_nuevos_activos' => true,
                 'crear_activos' => false,
                 'editar_activos' => false,
                 'eliminar_activos' => false,
@@ -228,6 +301,7 @@ class Usuario {
             'director' => [
                 'ver_activos' => false, // No puede ver lista, pero puede seleccionarlos al crear orden
                 'ver_lista_activos' => false,
+                'ver_nuevos_activos' => true,
                 'crear_activos' => false,
                 'editar_activos' => false,
                 'eliminar_activos' => false,
@@ -248,12 +322,13 @@ class Usuario {
             'operario' => [
                 'ver_activos' => true, // Puede ver activos
                 'ver_lista_activos' => true,
+                'ver_nuevos_activos' => true,
                 'crear_activos' => false,
                 'editar_activos' => false, // No puede editar
                 'eliminar_activos' => false,
                 'ver_ordenes' => true,
                 'ver_mis_ordenes' => true, // Solo las asignadas a él
-                'crear_ordenes' => true, // Puede crear órdenes
+                'crear_ordenes' => false,
                 'editar_ordenes' => false, // No puede editar
                 'eliminar_ordenes' => false, // No puede eliminar
                 'cambiar_estado_orden' => true, // Puede cambiar estado
@@ -266,14 +341,26 @@ class Usuario {
             ]
         ];
 
-        return isset($permisos[$rol][$accion]) && $permisos[$rol][$accion] === true;
+        if (isset($permisos[$rol][$accion]) && $permisos[$rol][$accion] === true) {
+            return true;
+        }
+
+        // Excepción por email: operarios específicos pueden crear órdenes (rutas restringidas)
+        if ($accion === 'crear_ordenes') {
+            $emailNormalizado = strtolower(trim($email ?? ($_SESSION['usuario_email'] ?? '')));
+            if (isset(self::excepcionesCrearOrdenes()[$emailNormalizado])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
      * Verificar si puede ver todas las órdenes o solo las propias
      */
     public static function puedeVerTodasOrdenes($rol) {
-        return in_array($rol, ['administrador', 'jefe', 'director']);
+        return in_array($rol, ['administrador', 'superadmin', 'jefe', 'director']);
     }
 
     /**
@@ -287,7 +374,7 @@ class Usuario {
      * Verificar si puede asignar órdenes
      */
     public static function puedeAsignarOrdenes($rol) {
-        return $rol === 'administrador';
+        return in_array($rol, ['administrador', 'superadmin'], true);
     }
 }
 

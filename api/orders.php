@@ -41,6 +41,7 @@ $ordenModel = new OrdenTrabajo();
 $usuarioAutenticado = ApiAuth::requireUser();
 $rol = $usuarioAutenticado['rol'];
 $usuarioId = $usuarioAutenticado['id_usuario'];
+$emailUsuario = $usuarioAutenticado['email'] ?? null;
 
 /**
  * Verifica que el usuario tenga acceso a la orden proporcionada.
@@ -200,7 +201,7 @@ try {
 
         case 'POST':
             if (!$id) {
-                ApiAuth::ensurePermission($rol, ['crear_ordenes']);
+                ApiAuth::ensurePermission($rol, ['crear_ordenes'], $emailUsuario);
 
                 $input = $_POST;
                 if (empty($input)) {
@@ -210,6 +211,20 @@ try {
                 $ordenModel->id_activo = $input['id_activo'] ?? null;
                 if (empty($ordenModel->id_activo)) {
                     ApiResponse::validationError(['id_activo' => 'Debe indicar el activo asociado.']);
+                }
+
+                $activoModel = new Activo();
+                $activoSeleccionado = $activoModel->obtenerPorId((int)$ordenModel->id_activo);
+                if (!$activoSeleccionado) {
+                    ApiResponse::validationError(['id_activo' => 'El activo seleccionado no existe.']);
+                }
+
+                $rutasPermitidas = Usuario::rutasRestringidasCrearOrdenes($emailUsuario);
+                if ($rutasPermitidas !== null) {
+                    $rutaActivo = $activoSeleccionado['ruta'] ?? '';
+                    if (!in_array($rutaActivo, $rutasPermitidas, true)) {
+                        ApiResponse::error('Solo puede crear órdenes para la ruta Cofres de Cremación.', 403);
+                    }
                 }
 
                 $ordenModel->id_solicitud = $input['id_solicitud'] ?? null;

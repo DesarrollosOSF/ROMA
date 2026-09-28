@@ -66,11 +66,25 @@ class ActivosController {
      * Procesar creación de activo
      */
     public function guardar() {
-        $this->activo->nombre_activo = $_POST['nombre_activo'] ?? '';
+        $nombre_activo = trim($_POST['nombre_activo'] ?? '');
+        $categoria = $_POST['categoria'] ?? '';
+        if ($nombre_activo === '') {
+            $_SESSION['mensaje'] = 'El nombre del activo es obligatorio.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=crear');
+            exit;
+        }
+        if ($categoria === '' || !array_key_exists($categoria, ASSET_CATEGORIES)) {
+            $_SESSION['mensaje'] = 'Debe seleccionar una categoría válida.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=crear');
+            exit;
+        }
+        $this->activo->nombre_activo = $nombre_activo;
         $this->activo->codigo_interno = $_POST['codigo_interno'] ?? '';
         $this->activo->codigo_patrimonial = $_POST['codigo_patrimonial'] ?? '';
         $this->activo->descripcion_general = $_POST['descripcion_general'] ?? '';
-        $this->activo->categoria = $_POST['categoria'] ?? '';
+        $this->activo->categoria = $categoria;
         $this->activo->ubicacion = $_POST['ubicacion'] ?? '';
         $this->activo->ruta = $_POST['ruta'] ?? '';
         $this->activo->responsable = $_POST['responsable'] ?? '';
@@ -80,7 +94,11 @@ class ActivosController {
         $this->activo->numero_serie = $_POST['numero_serie'] ?? '';
         $this->activo->fecha_adquisicion = $_POST['fecha_adquisicion'] ?? null;
         $this->activo->valor_adquisicion = $_POST['valor_adquisicion'] ?? 0;
-        $this->activo->estado_actual = $_POST['estado_actual'] ?? 'operativo';
+        $estado_actual = $_POST['estado_actual'] ?? 'operativo';
+        if (!array_key_exists($estado_actual, ASSET_STATES)) {
+            $estado_actual = 'operativo';
+        }
+        $this->activo->estado_actual = $estado_actual;
         $this->activo->vida_util_estimada = $_POST['vida_util_estimada'] ?? null;
         $this->activo->kilometraje = $_POST['kilometraje'] ?? 0;
         $this->activo->horas_uso = $_POST['horas_uso'] ?? 0;
@@ -185,10 +203,23 @@ class ActivosController {
 
         $tipos_mantenimiento = MAINTENANCE_TYPES;
         $categorias = ASSET_CATEGORIES;
-        
+
         // Cargar operarios para el select de técnico
         $usuarioModel = new Usuario();
         $operarios = $usuarioModel->obtenerOperarios();
+
+        // Historial de auditoría del activo (quién/qué/cuándo) — visible según permiso
+        $historialAuditoria = [];
+        try {
+            $historialAuditoria = $this->activo->obtenerAuditoria([
+                'id_activo' => $id,
+                'limit' => 50,
+                'offset' => 0
+            ]);
+        } catch (Exception $e) {
+            $historialAuditoria = [];
+        }
+        $etiquetasCampos = Activo::camposAuditables();
 
         require_once __DIR__ . '/../views/activos/detalle.php';
     }
@@ -426,12 +457,26 @@ class ActivosController {
      * Procesar actualización
      */
     public function actualizar($id) {
+        $nombre_activo = trim($_POST['nombre_activo'] ?? '');
+        $categoria = $_POST['categoria'] ?? '';
+        if ($nombre_activo === '') {
+            $_SESSION['mensaje'] = 'El nombre del activo es obligatorio.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=editar&id=' . $id);
+            exit;
+        }
+        if ($categoria === '' || !array_key_exists($categoria, ASSET_CATEGORIES)) {
+            $_SESSION['mensaje'] = 'Debe seleccionar una categoría válida.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=editar&id=' . $id);
+            exit;
+        }
         $this->activo->id_activo = $id;
-        $this->activo->nombre_activo = $_POST['nombre_activo'] ?? '';
+        $this->activo->nombre_activo = $nombre_activo;
         $this->activo->codigo_interno = $_POST['codigo_interno'] ?? '';
         $this->activo->codigo_patrimonial = $_POST['codigo_patrimonial'] ?? '';
         $this->activo->descripcion_general = $_POST['descripcion_general'] ?? '';
-        $this->activo->categoria = $_POST['categoria'] ?? '';
+        $this->activo->categoria = $categoria;
         $this->activo->ubicacion = $_POST['ubicacion'] ?? '';
         $this->activo->ruta = $_POST['ruta'] ?? '';
         $this->activo->responsable = $_POST['responsable'] ?? '';
@@ -441,7 +486,11 @@ class ActivosController {
         $this->activo->numero_serie = $_POST['numero_serie'] ?? '';
         $this->activo->fecha_adquisicion = $_POST['fecha_adquisicion'] ?? null;
         $this->activo->valor_adquisicion = $_POST['valor_adquisicion'] ?? 0;
-        $this->activo->estado_actual = $_POST['estado_actual'] ?? 'operativo';
+        $estado_actual = $_POST['estado_actual'] ?? 'operativo';
+        if (!array_key_exists($estado_actual, ASSET_STATES)) {
+            $estado_actual = 'operativo';
+        }
+        $this->activo->estado_actual = $estado_actual;
         $this->activo->vida_util_estimada = $_POST['vida_util_estimada'] ?? null;
         $this->activo->kilometraje = $_POST['kilometraje'] ?? 0;
         $this->activo->horas_uso = $_POST['horas_uso'] ?? 0;
@@ -498,89 +547,384 @@ class ActivosController {
     }
 
     /**
+     * Sección de auditoría (solo administradores).
+     * Muestra quién creó/editó/eliminó cada activo y cuándo, con detalle por campo.
+     */
+    public function auditoria() {
+        $rol = $_SESSION['usuario_rol'] ?? '';
+        if (!Usuario::esAdminGeneral($rol)) {
+            $_SESSION['mensaje'] = 'Acceso restringido: la auditoría es solo para administradores.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=dashboard');
+            exit;
+        }
+
+        require_once __DIR__ . '/../models/Usuario.php';
+        $usuarioModel = new Usuario();
+
+        $filtros = [
+            'tipo_operacion' => strtoupper(trim($_GET['tipo'] ?? '')),
+            'id_usuario' => (int)($_GET['usuario'] ?? 0),
+            'busqueda' => trim($_GET['busqueda'] ?? ''),
+            'fecha_desde' => trim($_GET['desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['hasta'] ?? ''),
+            'id_activo' => (int)($_GET['id_activo'] ?? 0),
+        ];
+        if (!in_array($filtros['tipo_operacion'], ['INSERT', 'UPDATE', 'DELETE'], true)) {
+            $filtros['tipo_operacion'] = '';
+        }
+        if ($filtros['id_usuario'] <= 0) $filtros['id_usuario'] = '';
+        if ($filtros['id_activo'] <= 0) $filtros['id_activo'] = '';
+        // Validar fechas simples YYYY-MM-DD
+        foreach (['fecha_desde', 'fecha_hasta'] as $k) {
+            if (!empty($filtros[$k]) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filtros[$k])) {
+                $filtros[$k] = '';
+            }
+        }
+
+        $pagina = max(1, (int)($_GET['pagina'] ?? 1));
+        $porPagina = 30;
+        $offset = ($pagina - 1) * $porPagina;
+
+        $total = $this->activo->contarAuditoria($filtros);
+        $totalPaginas = max(1, (int)ceil($total / $porPagina));
+        if ($pagina > $totalPaginas) {
+            $pagina = $totalPaginas;
+            $offset = ($pagina - 1) * $porPagina;
+        }
+
+        $registros = $this->activo->obtenerAuditoria($filtros + ['limit' => $porPagina, 'offset' => $offset]);
+        $etiquetasCampos = Activo::camposAuditables();
+        $usuariosLista = $usuarioModel->listar();
+
+        require_once __DIR__ . '/../views/activos/auditoria.php';
+    }
+
+    /**
      * Mostrar formulario de carga masiva
      */
     public function cargaMasiva() {
+        require_once __DIR__ . '/../models/Usuario.php';
+        $rol = $_SESSION['usuario_rol'] ?? '';
+        if (!Usuario::tienePermiso($rol, 'crear_activos')) {
+            $_SESSION['mensaje'] = 'No tiene permisos para carga masiva de activos';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos');
+            exit;
+        }
         require_once __DIR__ . '/../views/activos/carga_masiva.php';
     }
 
     /**
-     * Procesar carga masiva CSV
+     * Cómo funciona la carga masiva (resumen para la vista):
+     * 1) Se sube un CSV UTF-8 con encabezados (ver plantilla).
+     * 2) Se detecta el delimitador (, ; TAB) y se normalizan encabezados.
+     * 3) Cada fila se valida (nombre, categoría, estado, fechas, duplicados).
+     * 4) Las filas válidas se insertan una por una y cada una deja auditoría INSERT origen=carga_masiva.
+     * 5) Las filas con error NO se insertan y se reportan por número de línea para corregir y re-subir.
      */
     public function procesarCargaMasiva() {
-        if (!isset($_FILES['archivo_csv']) || $_FILES['archivo_csv']['error'] !== UPLOAD_ERR_OK) {
-            $_SESSION['mensaje'] = 'Error al subir el archivo';
+        require_once __DIR__ . '/../models/Usuario.php';
+        $rol = $_SESSION['usuario_rol'] ?? '';
+        if (!Usuario::tienePermiso($rol, 'crear_activos')) {
+            $_SESSION['mensaje'] = 'No tiene permisos para carga masiva de activos';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos');
+            return;
+        }
+
+        if (!isset($_FILES['archivo_csv']) || ($_FILES['archivo_csv']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $_SESSION['mensaje'] = 'Error al subir el archivo. Verifique que sea un CSV válido de máximo 10MB.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=carga_masiva');
+            return;
+        }
+
+        if (($_FILES['archivo_csv']['size'] ?? 0) > UPLOAD_MAX_SIZE) {
+            $_SESSION['mensaje'] = 'El archivo supera el tamaño máximo permitido (10MB).';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=carga_masiva');
+            return;
+        }
+
+        $nombreOriginal = $_FILES['archivo_csv']['name'] ?? '';
+        $ext = strtolower(pathinfo($nombreOriginal, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['csv', 'txt'], true)) {
+            $_SESSION['mensaje'] = 'Formato no permitido. Suba un archivo .csv (se acepta .txt con formato CSV).';
             $_SESSION['tipo_mensaje'] = 'error';
             header('Location: index.php?action=activos&subaction=carga_masiva');
             return;
         }
 
         $archivo = $_FILES['archivo_csv']['tmp_name'];
-        $resultado = $this->importarCSV($archivo);
+        try {
+            $resultado = $this->importarCSV($archivo);
+        } catch (Exception $e) {
+            $_SESSION['mensaje'] = 'Error procesando el archivo: ' . $e->getMessage();
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=activos&subaction=carga_masiva');
+            return;
+        }
 
-        $_SESSION['mensaje'] = "Procesados: {$resultado['exitosos']} exitosos, {$resultado['errores']} con errores";
+        $_SESSION['mensaje'] = "Carga masiva: {$resultado['exitosos']} creados, {$resultado['errores']} con errores, {$resultado['omitidos']} omitidos (de {$resultado['total_filas']} filas).";
         $_SESSION['tipo_mensaje'] = $resultado['errores'] > 0 ? 'warning' : 'success';
-        $_SESSION['detalle_carga'] = $resultado['detalles'];
+        // Guardar solo primeros 300 detalles para no saturar la sesión
+        $_SESSION['detalle_carga'] = array_slice($resultado['detalles'], 0, 300);
+        $_SESSION['resumen_carga'] = [
+            'exitosos' => $resultado['exitosos'],
+            'errores' => $resultado['errores'],
+            'omitidos' => $resultado['omitidos'],
+            'total' => $resultado['total_filas'],
+        ];
 
         header('Location: index.php?action=activos&subaction=carga_masiva');
     }
 
+    private function detectarDelimitador($lineaEncabezado) {
+        $candidatos = [',', ';', "\t"];
+        $mejor = ',';
+        $max = 0;
+        foreach ($candidatos as $d) {
+            $n = count(str_getcsv($lineaEncabezado, $d));
+            if ($n > $max) {
+                $max = $n;
+                $mejor = $d;
+            }
+        }
+        return $mejor;
+    }
+
+    private function normalizarFechaCSV($valor) {
+        $valor = trim((string)($valor ?? ''));
+        if ($valor === '' || $valor === '0000-00-00') return null;
+        // Acepta YYYY-MM-DD o DD/MM/YYYY o DD-MM-YYYY
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $valor, $m)) {
+            return checkdate((int)$m[2], (int)$m[3], (int)$m[1]) ? $valor : false;
+        }
+        if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $valor, $m)) {
+            $d = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+            $mo = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+            if (!checkdate((int)$mo, (int)$d, (int)$m[3])) return false;
+            return "{$m[3]}-{$mo}-{$d}";
+        }
+        return false;
+    }
+
     /**
-     * Importar activos desde CSV
+     * Importar activos desde CSV (robusto).
+     * Soporta todas las columnas del activo, valida y evita duplicados.
      */
     private function importarCSV($archivo) {
         $resultado = [
             'exitosos' => 0,
             'errores' => 0,
+            'omitidos' => 0,
+            'total_filas' => 0,
             'detalles' => []
         ];
 
-        if (($handle = fopen($archivo, 'r')) !== false) {
-            // Leer encabezados
-            $encabezados = fgetcsv($handle, 1000, ',');
-            
-            // Mapeo de columnas
-            $mapeo = [
-                'nombre_activo' => array_search('nombre_activo', $encabezados) !== false ? array_search('nombre_activo', $encabezados) : null,
-                'codigo_interno' => array_search('codigo_interno', $encabezados) !== false ? array_search('codigo_interno', $encabezados) : null,
-                'codigo_patrimonial' => array_search('codigo_patrimonial', $encabezados) !== false ? array_search('codigo_patrimonial', $encabezados) : null,
-                'categoria' => array_search('categoria', $encabezados) !== false ? array_search('categoria', $encabezados) : null,
-                'ubicacion' => array_search('ubicacion', $encabezados) !== false ? array_search('ubicacion', $encabezados) : null,
-                'marca' => array_search('marca', $encabezados) !== false ? array_search('marca', $encabezados) : null,
-                'modelo' => array_search('modelo', $encabezados) !== false ? array_search('modelo', $encabezados) : null,
-                'estado_actual' => array_search('estado_actual', $encabezados) !== false ? array_search('estado_actual', $encabezados) : null,
-            ];
+        $contenido = @file_get_contents($archivo);
+        if ($contenido === false || $contenido === '') {
+            throw new Exception('El archivo está vacío o no se pudo leer.');
+        }
+        // Quitar BOM UTF-8 si existe (típico de Excel)
+        if (substr($contenido, 0, 3) === "\xEF\xBB\xBF") {
+            $contenido = substr($contenido, 3);
+        }
+        // Convertir a UTF-8 si viene en Latin1/Windows-1252
+        if (!mb_check_encoding($contenido, 'UTF-8')) {
+            $contenido = mb_convert_encoding($contenido, 'UTF-8', 'Windows-1252');
+        }
+        $tmpNormalizado = tempnam(sys_get_temp_dir(), 'roma_csv_');
+        file_put_contents($tmpNormalizado, $contenido);
 
-            $linea = 1;
-            while (($data = fgetcsv($handle, 1000, ',')) !== false) {
-                $linea++;
-                
-                if (count($data) < 2) continue;
+        $handle = fopen($tmpNormalizado, 'r');
+        if ($handle === false) {
+            throw new Exception('No se pudo abrir el archivo para lectura.');
+        }
 
-                try {
-                    $this->activo->nombre_activo = $data[$mapeo['nombre_activo']] ?? '';
-                    $this->activo->codigo_interno = $data[$mapeo['codigo_interno']] ?? '';
-                    $this->activo->codigo_patrimonial = $data[$mapeo['codigo_patrimonial']] ?? '';
-                    $this->activo->categoria = $data[$mapeo['categoria']] ?? 'equipo_especial';
-                    $this->activo->ubicacion = $data[$mapeo['ubicacion']] ?? '';
-                    $this->activo->marca = $data[$mapeo['marca']] ?? '';
-                    $this->activo->modelo = $data[$mapeo['modelo']] ?? '';
-                    $this->activo->estado_actual = $data[$mapeo['estado_actual']] ?? 'operativo';
-                    $this->activo->usuario_creacion = $_SESSION['usuario_id'] ?? 1;
+        $primeraLinea = fgets($handle);
+        if ($primeraLinea === false) {
+            fclose($handle);
+            @unlink($tmpNormalizado);
+            throw new Exception('El archivo no tiene encabezados.');
+        }
+        $delimitador = $this->detectarDelimitador($primeraLinea);
+        rewind($handle);
 
-                    if ($this->activo->crear()) {
-                        $resultado['exitosos']++;
-                        $resultado['detalles'][] = "Línea $linea: Activo creado correctamente";
-                    } else {
-                        $resultado['errores']++;
-                        $resultado['detalles'][] = "Línea $linea: Error al crear activo";
-                    }
-                } catch (Exception $e) {
-                    $resultado['errores']++;
-                    $resultado['detalles'][] = "Línea $linea: " . $e->getMessage();
+        $encabezadosRaw = fgetcsv($handle, 0, $delimitador);
+        if (!$encabezadosRaw) {
+            fclose($handle);
+            @unlink($tmpNormalizado);
+            throw new Exception('No se pudieron leer los encabezados del CSV.');
+        }
+        $encabezados = array_map(function ($h) {
+            return strtolower(trim((string)$h));
+        }, $encabezadosRaw);
+
+        $columnasSoportadas = ['nombre_activo','codigo_interno','codigo_patrimonial','descripcion_general','categoria','ubicacion','ruta','responsable','area_asignada','marca','modelo','numero_serie','fecha_adquisicion','valor_adquisicion','estado_actual','vida_util_estimada','kilometraje','horas_uso','proximo_mantenimiento','observaciones'];
+        $mapeo = [];
+        foreach ($columnasSoportadas as $col) {
+            $idx = array_search($col, $encabezados, true);
+            $mapeo[$col] = ($idx !== false) ? $idx : null;
+        }
+
+        if ($mapeo['nombre_activo'] === null) {
+            fclose($handle);
+            @unlink($tmpNormalizado);
+            throw new Exception('Falta la columna obligatoria "nombre_activo". Descargue la plantilla.');
+        }
+        if ($mapeo['categoria'] === null) {
+            fclose($handle);
+            @unlink($tmpNormalizado);
+            throw new Exception('Falta la columna obligatoria "categoria". Descargue la plantilla.');
+        }
+
+        $categoriasValidas = array_keys(ASSET_CATEGORIES);
+        $estadosValidos = array_keys(ASSET_STATES);
+        $codigosExistentes = $this->activo->obtenerCodigosInternosExistentes();
+        $vistosEnArchivo = [];
+        $usuarioId = $_SESSION['usuario_id'] ?? 1;
+
+        $linea = 1; // encabezado
+        $MAX_FILAS = 5000;
+        while (($data = fgetcsv($handle, 0, $delimitador)) !== false) {
+            $linea++;
+            if ($linea > $MAX_FILAS + 1) {
+                $resultado['omitidos']++;
+                $resultado['detalles'][] = "Línea $linea: omitida, supera el máximo de $MAX_FILAS filas por carga.";
+                continue;
+            }
+            // Fila totalmente vacía
+            $todosVacios = true;
+            foreach ($data as $c) {
+                if (trim((string)$c) !== '') {
+                    $todosVacios = false;
+                    break;
                 }
             }
-            fclose($handle);
+            if ($todosVacios) {
+                $resultado['omitidos']++;
+                continue;
+            }
+            $resultado['total_filas']++;
+
+            $get = function ($col) use ($data, $mapeo) {
+                $i = $mapeo[$col];
+                if ($i === null || !array_key_exists($i, $data)) return '';
+                return trim((string)$data[$i]);
+            };
+
+            $nombre = $get('nombre_activo');
+            $categoria = strtolower($get('categoria'));
+            $estado = strtolower($get('estado_actual'));
+            if ($estado === '') $estado = 'operativo';
+            $codigoInterno = $get('codigo_interno');
+
+            // Validaciones
+            if ($nombre === '') {
+                $resultado['errores']++;
+                $resultado['detalles'][] = "Línea $linea: el nombre_activo es obligatorio.";
+                continue;
+            }
+            if (!in_array($categoria, $categoriasValidas, true)) {
+                $resultado['errores']++;
+                $resultado['detalles'][] = "Línea $linea: categoría inválida '$categoria'. Válidas: " . implode(', ', $categoriasValidas) . ".";
+                continue;
+            }
+            if (!in_array($estado, $estadosValidos, true)) {
+                $resultado['errores']++;
+                $resultado['detalles'][] = "Línea $linea: estado inválido '$estado'. Válidos: " . implode(', ', $estadosValidos) . ".";
+                continue;
+            }
+            if ($codigoInterno !== '') {
+                $clave = mb_strtolower($codigoInterno);
+                if (isset($codigosExistentes[$clave]) || isset($vistosEnArchivo[$clave])) {
+                    $resultado['errores']++;
+                    $resultado['detalles'][] = "Línea $linea: código_interno '$codigoInterno' duplicado (ya existe).";
+                    continue;
+                }
+            }
+            $fechaAdq = $this->normalizarFechaCSV($get('fecha_adquisicion'));
+            if ($fechaAdq === false) {
+                $resultado['errores']++;
+                $resultado['detalles'][] = "Línea $linea: fecha_adquisicion inválida. Use YYYY-MM-DD o DD/MM/YYYY.";
+                continue;
+            }
+            $fechaProx = $this->normalizarFechaCSV($get('proximo_mantenimiento'));
+            if ($fechaProx === false) {
+                $resultado['errores']++;
+                $resultado['detalles'][] = "Línea $linea: proximo_mantenimiento inválido. Use YYYY-MM-DD o DD/MM/YYYY.";
+                continue;
+            }
+            foreach (['valor_adquisicion' => $get('valor_adquisicion'), 'kilometraje' => $get('kilometraje'), 'horas_uso' => $get('horas_uso')] as $campoNum => $valNum) {
+                if ($valNum !== '' && !is_numeric(str_replace(',', '.', $valNum))) {
+                    $resultado['errores']++;
+                    $resultado['detalles'][] = "Línea $linea: $campoNum debe ser numérico.";
+                    continue 2;
+                }
+            }
+            $vidaUtil = $get('vida_util_estimada');
+            if ($vidaUtil !== '' && !ctype_digit($vidaUtil)) {
+                $resultado['errores']++;
+                $resultado['detalles'][] = "Línea $linea: vida_util_estimada debe ser un número entero de meses.";
+                continue;
+            }
+
+            try {
+                $this->activo->limpiarParaImportacion();
+                $this->activo->nombre_activo = mb_strtoupper($nombre, 'UTF-8');
+                $this->activo->codigo_interno = $codigoInterno;
+                $this->activo->codigo_patrimonial = $get('codigo_patrimonial');
+                $this->activo->descripcion_general = $get('descripcion_general');
+                $this->activo->categoria = $categoria;
+                $this->activo->ubicacion = $get('ubicacion');
+                $ruta = strtolower($get('ruta'));
+                $this->activo->ruta = in_array($ruta, $categoriasValidas, true) ? $ruta : $categoria;
+                $this->activo->responsable = $get('responsable');
+                $this->activo->area_asignada = strtolower($get('area_asignada'));
+                $this->activo->marca = $get('marca');
+                $this->activo->modelo = $get('modelo');
+                $this->activo->numero_serie = $get('numero_serie');
+                $this->activo->fecha_adquisicion = $fechaAdq;
+                $val = str_replace(',', '.', $get('valor_adquisicion'));
+                $this->activo->valor_adquisicion = $val === '' ? 0 : $val;
+                $this->activo->estado_actual = $estado;
+                $this->activo->vida_util_estimada = $vidaUtil === '' ? null : (int)$vidaUtil;
+                $km = str_replace(',', '.', $get('kilometraje'));
+                $this->activo->kilometraje = $km === '' ? 0 : $km;
+                $hu = str_replace(',', '.', $get('horas_uso'));
+                $this->activo->horas_uso = $hu === '' ? 0 : $hu;
+                $this->activo->proximo_mantenimiento = $fechaProx;
+                $this->activo->observaciones = $get('observaciones');
+                $this->activo->usuario_creacion = $usuarioId;
+                $this->activo->origen_auditoria = 'carga_masiva';
+
+                if ($this->activo->crear()) {
+                    $resultado['exitosos']++;
+                    if ($codigoInterno !== '') {
+                        $vistosEnArchivo[mb_strtolower($codigoInterno)] = true;
+                        $codigosExistentes[mb_strtolower($codigoInterno)] = true;
+                    }
+                } else {
+                    $resultado['errores']++;
+                    $resultado['detalles'][] = "Línea $linea ($nombre): no se pudo guardar (posible duplicado o error DB).";
+                }
+            } catch (Exception $e) {
+                $resultado['errores']++;
+                $msg = $e->getMessage();
+                // Traducir duplicado MySQL a mensaje claro
+                if (stripos($msg, 'Duplicate') !== false && stripos($msg, 'codigo_interno') !== false) {
+                    $msg = "código_interno '$codigoInterno' duplicado.";
+                }
+                $resultado['detalles'][] = "Línea $linea ($nombre): $msg";
+            }
+        }
+        fclose($handle);
+        @unlink($tmpNormalizado);
+
+        if ($resultado['total_filas'] === 0) {
+            throw new Exception('El archivo no contiene filas de datos.');
         }
 
         return $resultado;

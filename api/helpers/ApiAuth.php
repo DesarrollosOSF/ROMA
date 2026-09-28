@@ -70,10 +70,10 @@ class ApiAuth
         }
     }
 
-    public static function ensurePermission(string $rol, array $permisos): void
+    public static function ensurePermission(string $rol, array $permisos, ?string $email = null): void
     {
         foreach ($permisos as $permiso) {
-            if (Usuario::tienePermiso($rol, $permiso)) {
+            if (Usuario::tienePermiso($rol, $permiso, $email)) {
                 return;
             }
         }

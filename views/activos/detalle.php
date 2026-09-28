@@ -283,6 +283,63 @@ $hayDatosMantenimientos = !empty($estadisticasMantenimientos['total']);
 </div>
 <?php endif; ?>
 
+<?php if (Usuario::tienePermiso($rol_actual, 'ver_auditoria') || $rol_actual === 'administrador'): ?>
+<!-- Auditoría de cambios del activo -->
+<div class="card card-full">
+    <div class="card-header">
+        <h3><i class="fas fa-shield-alt"></i> Historial de Cambios (Auditoría)</h3>
+        <a href="<?php echo BASE_URL; ?>index.php?action=activos&subaction=auditoria&id_activo=<?php echo $activo['id_activo']; ?>" class="btn btn-sm btn-secondary">
+            <i class="fas fa-external-link-alt"></i> Ver en Auditoría
+        </a>
+    </div>
+    <div class="card-body">
+        <?php if (empty($historialAuditoria)): ?>
+            <div class="empty-state">
+                <i class="fas fa-shield-alt"></i>
+                <p>Sin movimientos registrados para este activo</p>
+            </div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha / Hora</th>
+                            <th>Usuario</th>
+                            <th>Operación</th>
+                            <th>Campo</th>
+                            <th>Antes → Después</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($historialAuditoria as $h):
+                            $tipoH = strtoupper($h['tipo_operacion'] ?? '');
+                            $badgeH = $tipoH === 'INSERT' ? 'success' : ($tipoH === 'DELETE' ? 'danger' : 'warning');
+                            $labelH = $tipoH === 'INSERT' ? 'Creación' : ($tipoH === 'DELETE' ? 'Eliminación' : 'Edición');
+                            $campoH = $h['campo_modificado'] ?? '';
+                            $campoLabel = ($campoH === '' || $campoH === null || $campoH === 'registro') ? 'Registro' : (($etiquetasCampos[$campoH] ?? $campoH));
+                        ?>
+                            <tr>
+                                <td style="white-space:nowrap;"><?php echo !empty($h['fecha_modificacion']) ? date('d/m/Y H:i', strtotime($h['fecha_modificacion'])) : 'N/A'; ?></td>
+                                <td>
+                                    <strong><?php echo htmlspecialchars($h['usuario_nombre'] ?? 'Sistema'); ?></strong><br>
+                                    <small class="text-muted"><?php echo htmlspecialchars($h['usuario_email'] ?? ''); ?></small>
+                                </td>
+                                <td><span class="badge badge-<?php echo $badgeH; ?>"><?php echo htmlspecialchars($labelH); ?></span></td>
+                                <td><?php echo htmlspecialchars($campoLabel); ?></td>
+                                <td style="max-width:360px;">
+                                    <div><span class="text-muted">Antes:</span> <?php echo htmlspecialchars(mb_strlen((string)($h['valor_anterior'] ?? '')) > 140 ? mb_substr((string)$h['valor_anterior'], 0, 140) . '…' : (string)($h['valor_anterior'] ?? '—')); ?></div>
+                                    <div><span class="text-muted">Después:</span> <?php echo htmlspecialchars(mb_strlen((string)($h['valor_nuevo'] ?? '')) > 140 ? mb_substr((string)$h['valor_nuevo'], 0, 140) . '…' : (string)($h['valor_nuevo'] ?? '—')); ?></div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Hoja de Vida -->
 <div class="card card-full">
     <div class="card-header">

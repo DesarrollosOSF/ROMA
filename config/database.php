@@ -7,8 +7,8 @@
 class Database {
     private $host = 'localhost';
     private $db_name = 'osfcomco_roma';
-    private $username = 'osfcomco_roma_bd';
-    private $password = 'D!M&5gSVf81.ñuc4P$';
+    private $username = 'root';
+    private $password = '';
     private $conn;
 
     public function getConnection() {

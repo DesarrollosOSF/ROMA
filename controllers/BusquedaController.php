@@ -56,7 +56,7 @@ class BusquedaController {
 
         // Buscar activos (solo si tiene permiso)
         $rol_actual = $_SESSION['usuario_rol'] ?? '';
-        if (Usuario::tienePermiso($rol_actual, 'ver_lista_activos') || $rol_actual === 'administrador') {
+        if (Usuario::tienePermiso($rol_actual, 'ver_lista_activos') || Usuario::esAdminGeneral($rol_actual)) {
             try {
                 if ($this->activo) {
                     $activos = $this->activo->listar(['busqueda' => $query]);
@@ -84,7 +84,7 @@ class BusquedaController {
         }
 
         // Buscar usuarios (solo administradores)
-        if (isset($_SESSION['usuario_rol']) && $_SESSION['usuario_rol'] === 'administrador') {
+        if (isset($_SESSION['usuario_rol']) && Usuario::esAdminGeneral($_SESSION['usuario_rol'])) {
             try {
                 if ($this->usuario) {
                     $usuarios = $this->usuario->listar(['busqueda' => $query]);

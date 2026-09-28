@@ -13,8 +13,8 @@ class UsuariosController {
     private $usuario;
 
     public function __construct() {
-        // Solo administradores pueden gestionar usuarios
-        AuthController::verificarRol('administrador');
+        // Administradores y super administradores pueden gestionar usuarios
+        AuthController::verificarRol(['administrador', 'superadmin']);
         
         $this->usuario = new Usuario();
     }
@@ -141,7 +141,8 @@ class UsuariosController {
         $telefono = $_POST['telefono'] ?? '';
         $cargo = $_POST['cargo'] ?? '';
         $area = $_POST['area'] ?? '';
-        $activo = isset($_POST['activo']) ? 1 : 0;
+        /*$activo = isset($_POST['activo']) ? 1 : 0;*/
+        $activo = $_POST['activo'];
 
         $database = new Database();
         $conn = $database->getConnection();

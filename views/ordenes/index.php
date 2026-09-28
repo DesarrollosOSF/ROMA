@@ -23,6 +23,14 @@ require_once __DIR__ . '/../../models/Usuario.php';
     </div>
 </div>
 
+<?php $creado_por_nombre = $creado_por_nombre ?? ''; ?>
+<?php if (!empty($_GET['creado_por']) && $creado_por_nombre !== ''): ?>
+<div class="alert alert-info">
+    <i class="fas fa-user-edit"></i> Mostrando órdenes creadas por: <strong><?php echo htmlspecialchars($creado_por_nombre); ?></strong>
+    <a href="<?php echo BASE_URL; ?>index.php?action=ordenes" class="btn btn-sm btn-secondary ml-2">Ver todas</a>
+</div>
+<?php endif; ?>
+
 <!-- Filtros -->
 <div class="card">
     <div class="card-header">
@@ -32,6 +40,9 @@ require_once __DIR__ . '/../../models/Usuario.php';
         <form method="GET" action="<?php echo BASE_URL; ?>index.php" class="filters-form">
             <input type="hidden" name="action" value="ordenes">
             <input type="hidden" name="pagina" value="1">
+            <?php if (!empty($_GET['creado_por'])): ?>
+            <input type="hidden" name="creado_por" value="<?php echo (int)$_GET['creado_por']; ?>">
+            <?php endif; ?>
             
             <div class="form-grid">
                 <div class="form-group">
@@ -95,6 +106,9 @@ require_once __DIR__ . '/../../models/Usuario.php';
                     <label>Asignado a</label>
                     <select name="asignado">
                         <option value="">Todos</option>
+                        <option value="sin_asignar" <?php echo (isset($_GET['asignado']) && $_GET['asignado'] === 'sin_asignar') ? 'selected' : ''; ?>>
+                            Sin asignar
+                        </option>
                         <?php foreach ($operarios as $operario): ?>
                             <option value="<?php echo $operario['id_usuario']; ?>" 
                                     <?php echo (isset($_GET['asignado']) && $_GET['asignado'] == $operario['id_usuario']) ? 'selected' : ''; ?>>
@@ -281,6 +295,7 @@ require_once __DIR__ . '/../../models/Usuario.php';
                 if (!empty($_GET['criticidad'])) $params_pag['criticidad'] = $_GET['criticidad'];
                 if (!empty($_GET['asignado'])) $params_pag['asignado'] = $_GET['asignado'];
                 if (!empty($_GET['activo'])) $params_pag['activo'] = $_GET['activo'];
+                if (!empty($_GET['creado_por'])) $params_pag['creado_por'] = (int)$_GET['creado_por'];
                 if (isset($_GET['por_pagina'])) $params_pag['por_pagina'] = (int)$_GET['por_pagina'];
                 $url_base = BASE_URL . 'index.php?' . http_build_query($params_pag);
                 $desde = $total_ordenes > 0 ? (($pagina_actual - 1) * $registros_por_pagina) + 1 : 0;

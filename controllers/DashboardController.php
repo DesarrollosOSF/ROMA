@@ -32,7 +32,7 @@ class DashboardController {
 
         $puede_ver_activos = Usuario::tienePermiso($rol, 'ver_activos') || Usuario::tienePermiso($rol, 'ver_lista_activos');
         $puede_ver_ordenes = Usuario::tienePermiso($rol, 'ver_ordenes') || Usuario::tienePermiso($rol, 'ver_mis_ordenes');
-        $es_admin = ($rol === 'administrador');
+        $es_admin = Usuario::esAdminGeneral($rol);
 
         // Obtener información filtrada por rol
         $estadisticas = $this->obtenerEstadisticas($rol, $usuario_id, $puede_ver_activos, $puede_ver_ordenes);

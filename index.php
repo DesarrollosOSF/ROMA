@@ -15,6 +15,8 @@ require_once __DIR__ . '/controllers/OrdenesController.php';
 require_once __DIR__ . '/controllers/BusquedaController.php';
 require_once __DIR__ . '/controllers/NotificacionesController.php';
 require_once __DIR__ . '/controllers/PerfilController.php';
+require_once __DIR__ . '/controllers/ResponsablesController.php';
+require_once __DIR__ . '/controllers/NuevosActivosController.php';
 
 // Obtener acción
 $action = $_GET['action'] ?? 'dashboard';
@@ -104,6 +106,9 @@ try {
                 case 'procesar_carga':
                     $controller->procesarCargaMasiva();
                     break;
+                case 'auditoria':
+                    $controller->auditoria();
+                    break;
                 default:
                     $controller->index();
                     break;
@@ -137,6 +142,192 @@ try {
                 case 'eliminar':
                     if ($id) {
                         $controller->eliminar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                default:
+                    $controller->index();
+                    break;
+            }
+            break;
+
+        case 'nuevos_activos':
+            $controller = new NuevosActivosController();
+
+            switch ($subaction) {
+                case 'categoria':
+                    if ($id) {
+                        $controller->categoria($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'crear':
+                    $controller->crear();
+                    break;
+                case 'guardar':
+                    $controller->guardar();
+                    break;
+                case 'ver':
+                    if ($id) {
+                        $controller->ver($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'editar':
+                    if ($id) {
+                        $controller->editar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'actualizar':
+                    if ($id) {
+                        $controller->actualizar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'eliminar':
+                    if ($id) {
+                        $controller->eliminar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'crear_categoria':
+                    $controller->crearCategoria();
+                    break;
+                case 'guardar_categoria':
+                    $controller->guardarCategoria();
+                    break;
+                case 'editar_categoria':
+                    if ($id) {
+                        $controller->editarCategoria($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'actualizar_categoria':
+                    if ($id) {
+                        $controller->actualizarCategoria($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'eliminar_categoria':
+                    if ($id) {
+                        $controller->eliminarCategoria($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'carga_masiva':
+                    $controller->cargaMasiva();
+                    break;
+                case 'procesar_carga':
+                    $controller->procesarCargaMasiva();
+                    break;
+                case 'auditoria':
+                    $controller->auditoria();
+                    break;
+                case 'formato':
+                    $controller->formato();
+                    break;
+                case 'generar_formato':
+                    $controller->generarFormato();
+                    break;
+                case 'datos_trabajador':
+                    if ($id) {
+                        $controller->datosTrabajador($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'subir_adjunto':
+                    if ($id) {
+                        $controller->subirAdjunto($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'eliminar_adjunto':
+                    if ($id) {
+                        $controller->eliminarAdjunto($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                default:
+                    $controller->index();
+                    break;
+            }
+            break;
+
+        case 'responsables':
+            $controller = new ResponsablesController();
+
+            switch ($subaction) {
+                case 'crear':
+                    $controller->crear();
+                    break;
+                case 'guardar':
+                    $controller->guardar();
+                    break;
+                case 'ver':
+                    if ($id) {
+                        $controller->ver($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'editar':
+                    if ($id) {
+                        $controller->editar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'actualizar':
+                    if ($id) {
+                        $controller->actualizar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'eliminar':
+                    if ($id) {
+                        $controller->eliminar($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'guardar_movimiento':
+                    if ($id) {
+                        $controller->guardarMovimiento($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'eliminar_movimiento':
+                    if ($id) {
+                        $controller->eliminarMovimiento($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'subir_formato':
+                    if ($id) {
+                        $controller->subirFormato($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'eliminar_formato':
+                    if ($id) {
+                        $controller->eliminarFormato($id);
                     } else {
                         $controller->index();
                     }
@@ -232,6 +423,9 @@ try {
                     break;
                 case 'metricas':
                     $controller->metricas();
+                    break;
+                case 'informe':
+                    $controller->informe();
                     break;
                 case 'actualizar_asignacion':
                     $controller->actualizarAsignacion();

@@ -95,12 +95,14 @@ class AuthController {
     }
 
     /**
-     * Verificar si el usuario tiene un rol específico
+     * Verificar si el usuario tiene uno de los roles permitidos.
+     * Acepta un rol (string) o varios (array) por compatibilidad.
      */
     public static function verificarRol($rol) {
         self::verificarAutenticacion();
-        
-        if (!isset($_SESSION['usuario_rol']) || $_SESSION['usuario_rol'] !== $rol) {
+
+        $permitidos = is_array($rol) ? $rol : [$rol];
+        if (!isset($_SESSION['usuario_rol']) || !in_array($_SESSION['usuario_rol'], $permitidos, true)) {
             $_SESSION['mensaje'] = 'No tiene permisos para acceder a esta sección';
             $_SESSION['tipo_mensaje'] = 'error';
             header('Location: index.php?action=dashboard');

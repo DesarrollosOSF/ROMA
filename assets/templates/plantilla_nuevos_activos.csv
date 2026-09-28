@@ -1,0 +1,4 @@
+categoria,codigo,codigo_serial,codigo_placa,fecha_ingreso,codigo_cuenta_contable,codigo_grupo_activo_fijo,descripcion,valor,nombre,sede,estado,responsable_general,documento_responsable
+equipo_de_computacion_y_comunicacion,PC-001,SN-HP-0001,PLA-001,2024-01-15,152405,GAF-001,Portátil para área administrativa,3500000,PORTATIL HP PROBOOK 440,Sede principal Tunja,operativo,Juan Pérez,1234567890
+equipo_de_computacion_y_comunicacion,IMP-001,SN-EPSON-100,,2024-02-01,152410,GAF-002,Impresora multifuncional con tinta continua,1200000,IMPRESORA EPSON L3250,Sede principal Tunja,operativo,Juan Pérez,
+maquinaria_y_equipo,MAQ-001,SN-IND-300,,2023-06-10,152801,GAF-010,Compresor industrial de 100L,8500000,COMPRESOR INDUSTRIAL,Centro de Operaciones,en_reparacion,Carlos López,

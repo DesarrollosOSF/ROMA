@@ -94,6 +94,7 @@ define('CRITICITY_LEVELS', [
 // Roles de usuario
 define('USER_ROLES', [
     'administrador' => 'Administrador',
+    'superadmin' => 'Super Administrador',
     'jefe' => 'Jefe',
     'director' => 'Director',
     'operario' => 'Operario'

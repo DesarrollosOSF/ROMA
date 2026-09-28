@@ -7,6 +7,11 @@ require_once __DIR__ . '/../../models/Usuario.php';
 <div class="page-header">
     <h1><i class="fas fa-box"></i> Gestión de Activos</h1>
     <div class="header-actions">
+        <?php if (($_SESSION['usuario_rol'] ?? '') === 'administrador'): ?>
+            <a href="<?php echo BASE_URL; ?>index.php?action=activos&subaction=auditoria" class="btn btn-secondary">
+                <i class="fas fa-shield-alt"></i> Auditoría
+            </a>
+        <?php endif; ?>
         <a href="<?php echo BASE_URL; ?>index.php?action=activos&subaction=carga_masiva" class="btn btn-success">
             <i class="fas fa-upload"></i> Carga Masiva
         </a>

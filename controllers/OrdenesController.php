@@ -45,7 +45,8 @@ class OrdenesController {
             'criticidad' => $_GET['criticidad'] ?? '',
             'asignado_a' => $_GET['asignado'] ?? '',
             'activo' => $_GET['activo'] ?? '',
-            'busqueda' => $_GET['busqueda'] ?? ''
+            'busqueda' => $_GET['busqueda'] ?? '',
+            'creado_por' => isset($_GET['creado_por']) && $_GET['creado_por'] !== '' ? (int)$_GET['creado_por'] : ''
         ];
         // En la web: por defecto no mostrar órdenes finalizadas (solo si el usuario filtra por "Finalizado")
         if ($estado_get === '') {
@@ -91,7 +92,30 @@ class OrdenesController {
         $estados = ORDER_STATES;
         $criticidades = CRITICITY_LEVELS;
 
+        $creado_por_nombre = '';
+        if (!empty($filtros['creado_por'])) {
+            $u = $this->usuario->obtenerPorId($filtros['creado_por']);
+            $creado_por_nombre = $u ? ($u['nombre'] ?? '') : '';
+        }
+
         require_once __DIR__ . '/../views/ordenes/index.php';
+    }
+
+    /**
+     * Informe de órdenes creadas por usuario (quién creó cada orden y sus estados).
+     */
+    public function informe() {
+        $rol = $_SESSION['usuario_rol'] ?? '';
+        $usuario_id = $_SESSION['usuario_id'] ?? null;
+
+        $fecha_desde = !empty($_GET['fecha_desde']) ? $_GET['fecha_desde'] . ' 00:00:00' : null;
+        $fecha_hasta = !empty($_GET['fecha_hasta']) ? $_GET['fecha_hasta'] : null;
+
+        $informe = $this->orden->obtenerInformePorCreador($fecha_desde, $fecha_hasta);
+        $estados = ORDER_STATES;
+
+        $page_title = 'Informe de Órdenes por Creador';
+        require_once __DIR__ . '/../views/ordenes/informe.php';
     }
 
     /**
@@ -170,6 +194,15 @@ class OrdenesController {
             // Cargar rutas (mismas que las categorías)
             $rutas = defined('ASSET_CATEGORIES') ? ASSET_CATEGORIES : [];
 
+            // Restringir rutas/activos para usuarios con excepción (p. ej. Miguel Rico)
+            $rutasPermitidas = Usuario::rutasRestringidasCrearOrdenes();
+            if ($rutasPermitidas !== null) {
+                $rutas = array_intersect_key($rutas, array_flip($rutasPermitidas));
+                $activos = array_values(array_filter($activos, function ($activo) use ($rutasPermitidas) {
+                    return in_array($activo['ruta'] ?? '', $rutasPermitidas, true);
+                }));
+            }
+
             require_once __DIR__ . '/../views/ordenes/form.php';
         } catch (Exception $e) {
             error_log("Error en OrdenesController::crear(): " . $e->getMessage());
@@ -195,17 +228,77 @@ class OrdenesController {
             exit;
         }
         
-        $this->orden->id_activo = $_POST['id_activo'] ?? null;
+        // id_activo es obligatorio (NOT NULL y FK). Validar antes de crear.
+        $id_activo = isset($_POST['id_activo']) && $_POST['id_activo'] !== '' ? (int)$_POST['id_activo'] : null;
+        if ($id_activo === null || $id_activo <= 0) {
+            $_SESSION['mensaje'] = 'Debe seleccionar una ruta y un activo asociado antes de guardar.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=crear');
+            exit;
+        }
+        $activo_existe = $this->activo->obtenerPorId($id_activo);
+        if (!$activo_existe) {
+            $_SESSION['mensaje'] = 'El activo seleccionado no existe o fue dado de baja. Elija otro activo.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=crear');
+            exit;
+        }
+
+        // Validar ruta permitida para usuarios con excepción
+        $rutasPermitidas = Usuario::rutasRestringidasCrearOrdenes();
+        if ($rutasPermitidas !== null) {
+            $rutaActivo = $activo_existe['ruta'] ?? '';
+            if (!in_array($rutaActivo, $rutasPermitidas, true)) {
+                $_SESSION['mensaje'] = 'Solo puede crear órdenes para la ruta Cofres de Cremación.';
+                $_SESSION['tipo_mensaje'] = 'error';
+                header('Location: index.php?action=ordenes&subaction=crear');
+                exit;
+            }
+        }
+        
+        $id_solicitante = $_SESSION['usuario_id'] ?? ($_POST['id_solicitante'] ?? null);
+        $id_solicitante = $id_solicitante !== null && $id_solicitante !== '' ? (int)$id_solicitante : null;
+        if ($id_solicitante === null || $id_solicitante <= 0) {
+            $_SESSION['mensaje'] = 'No se pudo identificar al solicitante. Inicie sesión nuevamente.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=crear');
+            exit;
+        }
+        $solicitante_existe = $this->usuario->obtenerPorId($id_solicitante);
+        if (!$solicitante_existe) {
+            $_SESSION['mensaje'] = 'El usuario solicitante no existe en el sistema.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=crear');
+            exit;
+        }
+        $descripcion_corta = trim($_POST['descripcion_corta'] ?? '');
+        if ($descripcion_corta === '') {
+            $_SESSION['mensaje'] = 'La descripción corta es obligatoria.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=crear');
+            exit;
+        }
+
+        $tipo_mantenimiento = $_POST['tipo_mantenimiento'] ?? 'correctivo';
+        $nivel_criticidad = $_POST['nivel_criticidad'] ?? 'normal';
+        if (!array_key_exists($tipo_mantenimiento, MAINTENANCE_TYPES)) {
+            $tipo_mantenimiento = 'correctivo';
+        }
+        if (!array_key_exists($nivel_criticidad, CRITICITY_LEVELS)) {
+            $nivel_criticidad = 'normal';
+        }
+
+        $this->orden->id_activo = $id_activo;
         $this->orden->id_solicitud = $_POST['id_solicitud'] ?? null;
-        $this->orden->id_solicitante = $_SESSION['usuario_id'] ?? ($_POST['id_solicitante'] ?? null);
-        $this->orden->id_usuario_asignado = $_POST['id_usuario_asignado'] ?? null;
-        $this->orden->tipo_mantenimiento = $_POST['tipo_mantenimiento'] ?? 'correctivo';
-        $this->orden->nivel_criticidad = $_POST['nivel_criticidad'] ?? 'normal';
-        $this->orden->descripcion_corta = $_POST['descripcion_corta'] ?? '';
+        $this->orden->id_solicitante = $id_solicitante;
+        $this->orden->id_usuario_asignado = !empty($_POST['id_usuario_asignado']) ? (int)$_POST['id_usuario_asignado'] : null;
+        $this->orden->tipo_mantenimiento = $tipo_mantenimiento;
+        $this->orden->nivel_criticidad = $nivel_criticidad;
+        $this->orden->descripcion_corta = $descripcion_corta;
         $this->orden->descripcion_detallada = $_POST['descripcion_detallada'] ?? '';
         $this->orden->estado_proceso = 'recibido';
         $this->orden->fecha_limite_ejecucion = $_POST['fecha_limite_ejecucion'] ?? null;
-        $this->orden->usuario_creacion = $_SESSION['usuario_id'] ?? 1;
+        $this->orden->usuario_creacion = $id_solicitante;
 
         if ($this->orden->crear()) {
             $id_orden = $this->orden->id_orden;
@@ -431,14 +524,43 @@ class OrdenesController {
             exit;
         }
         
+        $id_usuario_asignado = isset($_POST['id_usuario_asignado']) && $_POST['id_usuario_asignado'] !== '' ? (int)$_POST['id_usuario_asignado'] : null;
+        if ($id_usuario_asignado !== null && $id_usuario_asignado > 0) {
+            if (!$this->usuario->obtenerPorId($id_usuario_asignado)) {
+                $_SESSION['mensaje'] = 'El operario seleccionado no existe en el sistema.';
+                $_SESSION['tipo_mensaje'] = 'error';
+                header('Location: index.php?action=ordenes&subaction=editar&id=' . $id);
+                exit;
+            }
+        }
+        $descripcion_corta = trim($_POST['descripcion_corta'] ?? '');
+        if ($descripcion_corta === '') {
+            $_SESSION['mensaje'] = 'La descripción corta es obligatoria.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=editar&id=' . $id);
+            exit;
+        }
+        $estado_proceso = $_POST['estado_proceso'] ?? 'recibido';
+        if (!array_key_exists($estado_proceso, ORDER_STATES)) {
+            $estado_proceso = $orden_actual['estado_proceso'];
+        }
+        $tipo_mantenimiento = $_POST['tipo_mantenimiento'] ?? 'correctivo';
+        $nivel_criticidad = $_POST['nivel_criticidad'] ?? 'normal';
+        if (!array_key_exists($tipo_mantenimiento, MAINTENANCE_TYPES)) {
+            $tipo_mantenimiento = $orden_actual['tipo_mantenimiento'];
+        }
+        if (!array_key_exists($nivel_criticidad, CRITICITY_LEVELS)) {
+            $nivel_criticidad = $orden_actual['nivel_criticidad'];
+        }
+
         $this->orden->id_orden = $id;
         $this->orden->id_activo = $id_activo;
-        $this->orden->id_usuario_asignado = $_POST['id_usuario_asignado'] ?? null;
-        $this->orden->tipo_mantenimiento = $_POST['tipo_mantenimiento'] ?? 'correctivo';
-        $this->orden->nivel_criticidad = $_POST['nivel_criticidad'] ?? 'normal';
-        $this->orden->descripcion_corta = $_POST['descripcion_corta'] ?? '';
+        $this->orden->id_usuario_asignado = $id_usuario_asignado;
+        $this->orden->tipo_mantenimiento = $tipo_mantenimiento;
+        $this->orden->nivel_criticidad = $nivel_criticidad;
+        $this->orden->descripcion_corta = $descripcion_corta;
         $this->orden->descripcion_detallada = $_POST['descripcion_detallada'] ?? '';
-        $this->orden->estado_proceso = $_POST['estado_proceso'] ?? 'recibido';
+        $this->orden->estado_proceso = $estado_proceso;
         $this->orden->fecha_limite_ejecucion = $_POST['fecha_limite_ejecucion'] ?? null;
 
         if ($this->orden->actualizar()) {
@@ -523,17 +645,28 @@ class OrdenesController {
             exit;
         }
         
-        $id_orden = $_POST['id_orden'] ?? null;
+        $id_orden = isset($_POST['id_orden']) && $_POST['id_orden'] !== '' ? (int)$_POST['id_orden'] : null;
         $nuevo_estado = $_POST['nuevo_estado'] ?? '';
         $comentario = $_POST['comentario'] ?? '';
         
-        if (!$id_orden || !$nuevo_estado) {
+        if (!$id_orden || $id_orden <= 0 || !$nuevo_estado) {
             if ($this->esAjax()) {
                 header('Content-Type: application/json');
                 echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
                 exit;
             }
             $_SESSION['mensaje'] = 'Datos incompletos';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=ver&id=' . ($id_orden ?: ''));
+            exit;
+        }
+        if (!array_key_exists($nuevo_estado, ORDER_STATES)) {
+            if ($this->esAjax()) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => 'Estado no válido']);
+                exit;
+            }
+            $_SESSION['mensaje'] = 'Estado no válido';
             $_SESSION['tipo_mensaje'] = 'error';
             header('Location: index.php?action=ordenes&subaction=ver&id=' . $id_orden);
             exit;
@@ -734,17 +867,28 @@ class OrdenesController {
             exit;
         }
         
-        $id_orden = $_POST['id_orden'] ?? null;
-        $id_nuevo_operario = $_POST['id_nuevo_operario'] ?? null;
+        $id_orden = isset($_POST['id_orden']) && $_POST['id_orden'] !== '' ? (int)$_POST['id_orden'] : null;
+        $id_nuevo_operario = isset($_POST['id_nuevo_operario']) && $_POST['id_nuevo_operario'] !== '' ? (int)$_POST['id_nuevo_operario'] : null;
         $comentario = $_POST['comentario'] ?? '';
         
-        if (!$id_orden || !$id_nuevo_operario) {
+        if (!$id_orden || $id_orden <= 0 || !$id_nuevo_operario || $id_nuevo_operario <= 0) {
             if ($this->esAjax()) {
                 header('Content-Type: application/json');
                 echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
                 exit;
             }
             $_SESSION['mensaje'] = 'Datos incompletos';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=ver&id=' . ($id_orden ?: ''));
+            exit;
+        }
+        if (!$this->usuario->obtenerPorId($id_nuevo_operario)) {
+            if ($this->esAjax()) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => 'El operario seleccionado no existe']);
+                exit;
+            }
+            $_SESSION['mensaje'] = 'El operario seleccionado no existe en el sistema.';
             $_SESSION['tipo_mensaje'] = 'error';
             header('Location: index.php?action=ordenes&subaction=ver&id=' . $id_orden);
             exit;
@@ -853,7 +997,7 @@ class OrdenesController {
      */
     public function metricas() {
         $rol = $_SESSION['usuario_rol'] ?? '';
-        if ($rol !== 'administrador') {
+        if (!Usuario::esAdminGeneral($rol)) {
             $_SESSION['mensaje'] = 'Solo el administrador puede acceder al informe de métricas.';
             $_SESSION['tipo_mensaje'] = 'error';
             header('Location: index.php?action=ordenes');
@@ -1153,17 +1297,35 @@ class OrdenesController {
             exit;
         }
 
-        $id_orden = $_POST['id_orden'] ?? null;
-        $comentario = $_POST['comentario'] ?? '';
+        $id_orden = isset($_POST['id_orden']) && $_POST['id_orden'] !== '' ? (int)$_POST['id_orden'] : null;
+        $comentario = trim($_POST['comentario'] ?? '');
 
-        if (!$id_orden || empty($comentario)) {
-            $_SESSION['mensaje'] = 'Comentario vacío';
+        if (!$id_orden || $id_orden <= 0) {
+            $_SESSION['mensaje'] = 'Orden no indicada';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes');
+            exit;
+        }
+        if ($comentario === '') {
+            $_SESSION['mensaje'] = 'El comentario no puede estar vacío';
             $_SESSION['tipo_mensaje'] = 'error';
             header('Location: index.php?action=ordenes&subaction=ver&id=' . $id_orden);
             exit;
         }
 
-        $id_usuario = $_SESSION['usuario_id'] ?? 1;
+        $id_usuario = $_SESSION['usuario_id'] ?? null;
+        if (!$id_usuario || !$this->usuario->obtenerPorId($id_usuario)) {
+            $_SESSION['mensaje'] = 'No se pudo identificar al usuario. Inicie sesión nuevamente.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes&subaction=ver&id=' . $id_orden);
+            exit;
+        }
+        if (!$this->orden->obtenerPorId($id_orden)) {
+            $_SESSION['mensaje'] = 'La orden no existe.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=ordenes');
+            exit;
+        }
 
         if ($this->orden->agregarComentario($id_orden, $id_usuario, $comentario)) {
             // Registrar en historial

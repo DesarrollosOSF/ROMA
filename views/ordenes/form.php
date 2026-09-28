@@ -106,19 +106,30 @@ if (empty($solicitante_email)) {
                 <?php endif; ?>
 
                 <?php if (!$is_editing): ?>
+                <?php
+                    $ruta_unica = (count($rutas) === 1) ? array_key_first($rutas) : null;
+                    $ruta_bloqueada = $ruta_unica !== null;
+                ?>
                 <div class="form-group">
                     <label for="ruta">Ruta <span class="text-danger">*</span></label>
-                    <select id="ruta" class="form-control" required>
-                        <option value="">Seleccione una ruta...</option>
+                    <select id="ruta" class="form-control" required <?php echo $ruta_bloqueada ? 'disabled' : ''; ?>>
+                        <?php if (!$ruta_bloqueada): ?>
+                            <option value="">Seleccione una ruta...</option>
+                        <?php endif; ?>
                         <?php if (!empty($rutas)): ?>
                             <?php foreach ($rutas as $key => $nombre): ?>
-                                <option value="<?php echo $key; ?>">
+                                <option value="<?php echo $key; ?>"
+                                    <?php echo ($ruta_unica === $key) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($nombre); ?>
                                 </option>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </select>
-                    <small class="form-text text-muted">Seleccione la ruta para filtrar los activos disponibles</small>
+                    <?php if ($ruta_bloqueada): ?>
+                        <small class="form-text text-muted">Solo puede crear órdenes para esta ruta</small>
+                    <?php else: ?>
+                        <small class="form-text text-muted">Seleccione la ruta para filtrar los activos disponibles</small>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
 

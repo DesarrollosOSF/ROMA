@@ -6,13 +6,13 @@ require_once __DIR__ . '/../../models/Usuario.php';
 $rol_actual = $_SESSION['usuario_rol'] ?? '';
 $puede_ver_activos = $puede_ver_activos ?? (Usuario::tienePermiso($rol_actual, 'ver_activos') || Usuario::tienePermiso($rol_actual, 'ver_lista_activos'));
 $puede_ver_ordenes = $puede_ver_ordenes ?? (Usuario::tienePermiso($rol_actual, 'ver_ordenes') || Usuario::tienePermiso($rol_actual, 'ver_mis_ordenes'));
-$es_admin = ($rol_actual === 'administrador');
+$es_admin = Usuario::esAdminGeneral($rol_actual);
 ?>
 
 <div class="page-header">
     <h1><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
     <div class="header-actions">
-        <?php if (isset($_SESSION['usuario_rol']) && $_SESSION['usuario_rol'] === 'administrador'): ?>
+        <?php if (isset($_SESSION['usuario_rol']) && Usuario::esAdminGeneral($_SESSION['usuario_rol'])): ?>
             <a href="<?php echo BASE_URL; ?>index.php?action=usuarios&subaction=crear" class="btn btn-success">
                 <i class="fas fa-user-plus"></i> Nuevo Usuario
             </a>

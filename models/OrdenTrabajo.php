@@ -93,14 +93,23 @@ class OrdenTrabajo {
             $params[':criticidad'] = $filtros['criticidad'];
         }
 
-        if (!empty($filtros['asignado_a'])) {
-            $query .= " AND ot.id_usuario_asignado = :asignado";
-            $params[':asignado'] = $filtros['asignado_a'];
+        if (isset($filtros['asignado_a']) && $filtros['asignado_a'] !== '') {
+            if ($filtros['asignado_a'] === 'sin_asignar') {
+                $query .= " AND ot.id_usuario_asignado IS NULL";
+            } else {
+                $query .= " AND ot.id_usuario_asignado = :asignado";
+                $params[':asignado'] = $filtros['asignado_a'];
+            }
         }
 
         if (!empty($filtros['solicitante'])) {
             $query .= " AND ot.id_solicitante = :solicitante";
             $params[':solicitante'] = $filtros['solicitante'];
+        }
+
+        if (!empty($filtros['creado_por'])) {
+            $query .= " AND ot.usuario_creacion = :creado_por";
+            $params[':creado_por'] = $filtros['creado_por'];
         }
 
         if (!empty($filtros['activo'])) {
@@ -187,14 +196,23 @@ class OrdenTrabajo {
             $params[':criticidad'] = $filtros['criticidad'];
         }
 
-        if (!empty($filtros['asignado_a'])) {
-            $query .= " AND ot.id_usuario_asignado = :asignado";
-            $params[':asignado'] = $filtros['asignado_a'];
+        if (isset($filtros['asignado_a']) && $filtros['asignado_a'] !== '') {
+            if ($filtros['asignado_a'] === 'sin_asignar') {
+                $query .= " AND ot.id_usuario_asignado IS NULL";
+            } else {
+                $query .= " AND ot.id_usuario_asignado = :asignado";
+                $params[':asignado'] = $filtros['asignado_a'];
+            }
         }
 
         if (!empty($filtros['solicitante'])) {
             $query .= " AND ot.id_solicitante = :solicitante";
             $params[':solicitante'] = $filtros['solicitante'];
+        }
+
+        if (!empty($filtros['creado_por'])) {
+            $query .= " AND ot.usuario_creacion = :creado_por";
+            $params[':creado_por'] = $filtros['creado_por'];
         }
 
         if (!empty($filtros['activo'])) {
@@ -232,6 +250,39 @@ class OrdenTrabajo {
     }
 
     /**
+     * Informe de órdenes agrupadas por usuario creador (usuario_creacion).
+     * Retorna por cada usuario: id_usuario, nombre, email, total, recibido, en_proceso, rechazado, finalizado.
+     * Opcional: filtrar por rango de fecha de creación.
+     */
+    public function obtenerInformePorCreador($fecha_desde = null, $fecha_hasta = null) {
+        $query = "SELECT u.id_usuario, u.nombre, u.email,
+                         COUNT(*) AS total,
+                         SUM(CASE WHEN ot.estado_proceso = 'recibido' THEN 1 ELSE 0 END) AS recibido,
+                         SUM(CASE WHEN ot.estado_proceso = 'en_proceso' THEN 1 ELSE 0 END) AS en_proceso,
+                         SUM(CASE WHEN ot.estado_proceso = 'rechazado' THEN 1 ELSE 0 END) AS rechazado,
+                         SUM(CASE WHEN ot.estado_proceso = 'finalizado' THEN 1 ELSE 0 END) AS finalizado
+                  FROM " . $this->table . " ot
+                  INNER JOIN usuarios u ON ot.usuario_creacion = u.id_usuario
+                  WHERE ot.activo = 1";
+        $params = [];
+        if ($fecha_desde) {
+            $query .= " AND ot.fecha_creacion >= :fecha_desde";
+            $params[':fecha_desde'] = $fecha_desde;
+        }
+        if ($fecha_hasta) {
+            $query .= " AND ot.fecha_creacion <= :fecha_hasta";
+            $params[':fecha_hasta'] = $fecha_hasta . ' 23:59:59';
+        }
+        $query .= " GROUP BY u.id_usuario, u.nombre, u.email ORDER BY total DESC";
+        $stmt = $this->conn->prepare($query);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Obtener métricas resumidas para el dashboard de órdenes (con filtros por rol).
      * Retorna: en_proceso, finalizadas, criticas, atrasadas, recibido, rechazado, total_activas.
      */
@@ -248,9 +299,13 @@ class OrdenTrabajo {
             LEFT JOIN activos a ON ot.id_activo = a.id_activo
             WHERE ot.activo = 1";
         $params = [];
-        if (!empty($filtros['asignado_a'])) {
-            $base .= " AND ot.id_usuario_asignado = :asignado";
-            $params[':asignado'] = $filtros['asignado_a'];
+        if (isset($filtros['asignado_a']) && $filtros['asignado_a'] !== '') {
+            if ($filtros['asignado_a'] === 'sin_asignar') {
+                $base .= " AND ot.id_usuario_asignado IS NULL";
+            } else {
+                $base .= " AND ot.id_usuario_asignado = :asignado";
+                $params[':asignado'] = $filtros['asignado_a'];
+            }
         }
         if (!empty($filtros['solicitante'])) {
             $base .= " AND ot.id_solicitante = :solicitante";
@@ -284,9 +339,13 @@ class OrdenTrabajo {
                   FROM " . $this->table . " ot
                   WHERE ot.activo = 1 AND ot.estado_proceso = 'finalizado'";
         $params = [];
-        if (!empty($filtros['asignado_a'])) {
-            $query .= " AND ot.id_usuario_asignado = :asignado";
-            $params[':asignado'] = $filtros['asignado_a'];
+        if (isset($filtros['asignado_a']) && $filtros['asignado_a'] !== '') {
+            if ($filtros['asignado_a'] === 'sin_asignar') {
+                $query .= " AND ot.id_usuario_asignado IS NULL";
+            } else {
+                $query .= " AND ot.id_usuario_asignado = :asignado";
+                $params[':asignado'] = $filtros['asignado_a'];
+            }
         }
         if (!empty($filtros['solicitante'])) {
             $query .= " AND ot.id_solicitante = :solicitante";
