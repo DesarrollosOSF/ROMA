@@ -1,0 +1,4 @@
+[02-Mar-2026 21:24:19 UTC] PHP Warning:  session_start(): Cannot find session save handler &quot;redis&quot; - session startup failed in /home/osfcomco/public_html/roma/index.php on line 6
+[02-Mar-2026 21:24:21 UTC] PHP Warning:  session_start(): Cannot find session save handler &quot;redis&quot; - session startup failed in /home/osfcomco/public_html/roma/index.php on line 6
+[02-Mar-2026 21:24:34 UTC] PHP Warning:  session_start(): Cannot find session save handler &quot;redis&quot; - session startup failed in /home/osfcomco/public_html/roma/index.php on line 6
+[02-Mar-2026 21:25:11 UTC] PHP Warning:  session_start(): Cannot find session save handler &quot;redis&quot; - session startup failed in /home/osfcomco/public_html/roma/index.php on line 6

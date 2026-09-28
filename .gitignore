@@ -1,0 +1,46 @@
+# Sistema ROMA - Archivos a ignorar
+
+# Archivos de configuración local
+config/local.php
+config/database.local.php
+
+# Archivos subidos
+uploads/*
+!uploads/.htaccess
+!uploads/.gitkeep
+
+# Logs
+logs/*
+!logs/.htaccess
+!logs/.gitkeep
+
+# Archivos temporales
+*.tmp
+*.temp
+*.log
+*.cache
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencias (si se usa Composer)
+/vendor/
+
+# Archivos de backup
+*.bak
+*.backup
+*.sql.gz
+
+# Variables de entorno
+.env
+.env.local
+

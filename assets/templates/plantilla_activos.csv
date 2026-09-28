@@ -1,0 +1,4 @@
+nombre_activo,codigo_interno,codigo_patrimonial,descripcion_general,categoria,ubicacion,ruta,responsable,area_asignada,marca,modelo,numero_serie,fecha_adquisicion,valor_adquisicion,estado_actual,vida_util_estimada,kilometraje,horas_uso,proximo_mantenimiento,observaciones
+COMPRESOR DE AIRE,COMP-001,PAT-001,Compresor para taller,equipo_especial,Centro de Operaciones,equipo_especial,,servicios,Atlas Copco,GA11,SN-0001,2024-01-15,5000000,operativo,60,0,0,2026-01-15,Equipo nuevo
+VEHICULO PICKUP,VEH-001,PAT-002,Camioneta de operaciones,vehiculos,Sede principal Tunja,vehiculos,,operaciones,Toyota,Hilux 2020,SN-0002,2023-06-01,120000000,operativo,84,50000,0,2026-02-01,Revisión al día
+MAQUINA SOLDADORA,MAQ-001,PAT-003,Soldadora multiproceso,maquinas,Centro de Operaciones,maquinas,,servicios,Miller,Multiprocess 220,SN-0003,2024-05-10,3500000,operativo,60,0,120,2026-03-01,
