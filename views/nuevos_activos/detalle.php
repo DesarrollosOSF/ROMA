@@ -103,7 +103,6 @@ function fichaFila($icono, $etiqueta, $valorHtml) {
                 <strong><?php echo ($activo['valor'] ?? null) !== null && $activo['valor'] !== '' ? '$' . number_format((float)$activo['valor'], 2, ',', '.') : 'N/A'; ?></strong>
             </div>
             <?php echo fichaFila('map-marker-alt', 'Sede', htmlspecialchars($activo['sede'] ?: 'N/A')); ?>
-            <?php echo fichaFila('user-tie', 'Jefe inmediato', htmlspecialchars($activo['responsable_general'] ?: 'N/A')); ?>
             <?php
             $trabHtml = 'N/A';
             if (!empty($activo['id_trabajador'])) {
@@ -112,9 +111,45 @@ function fichaFila($icono, $etiqueta, $valorHtml) {
             }
             echo fichaFila('id-card', 'Trabajador asociado', $trabHtml);
             ?>
+            <?php echo fichaFila('warehouse', 'Bodega', htmlspecialchars($activo['almacen_nombre'] ?? '' ?: 'N/A')); ?>
         </div>
     </div>
 </div>
+
+<?php if ($puedeGestionar): ?>
+<div class="card card-full" style="margin-bottom:1.25rem;">
+    <div class="card-header"><h3><i class="fas fa-warehouse"></i> Almacén</h3></div>
+    <div class="card-body">
+        <?php if (($activo['estado'] ?? '') === 'almacen'): ?>
+            <div class="alert alert-info" style="margin:0 0 1rem;">
+                <i class="fas fa-info-circle"></i>
+                Este activo está <strong>En almacén</strong><?php echo !empty($activo['almacen_nombre']) ? ' (<strong>' . htmlspecialchars($activo['almacen_nombre']) . '</strong>)' : ''; ?>.
+            </div>
+            <a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=retirar_almacen&id=<?php echo (int)$activo['id_nuevo_activo']; ?>"
+               class="btn btn-primary" onclick="return confirm('¿Retirar este activo del almacén? Volverá a estado operativo.')">
+                <i class="fas fa-sign-out-alt"></i> Retirar del Almacén
+            </a>
+        <?php else: ?>
+            <form method="POST" action="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=enviar_almacen&id=<?php echo (int)$activo['id_nuevo_activo']; ?>">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Enviar a la bodega</label>
+                        <select name="id_almacen" required>
+                            <option value="">Seleccione...</option>
+                            <?php foreach (($listaAlmacenes ?? []) as $b): ?>
+                                <option value="<?php echo (int)$b['id_almacen']; ?>"><?php echo htmlspecialchars($b['nombre']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions" style="justify-content:flex-start;">
+                    <button type="submit" class="btn btn-secondary"><i class="fas fa-warehouse"></i> Enviar al Almacén</button>
+                </div>
+            </form>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="card card-full" style="margin-bottom:1.25rem;">
     <div class="card-header"><h3><i class="fas fa-align-left"></i> Descripción</h3></div>

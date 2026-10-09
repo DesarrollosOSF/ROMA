@@ -35,7 +35,7 @@ $qBase = function ($over = []) {
             <input type="hidden" name="action" value="responsables">
             <div class="form-grid">
                 <div class="form-group">
-                    <label>Búsqueda (nombre, documento, cargo, dependencia)</label>
+                    <label>Búsqueda (nombre, documento, cargo, dirección, área)</label>
                     <input type="text" name="busqueda" value="<?php echo htmlspecialchars($_GET['busqueda'] ?? ''); ?>">
                 </div>
             </div>
@@ -66,7 +66,8 @@ $qBase = function ($over = []) {
                             <th>Nombre Completo</th>
                             <th>Documento</th>
                             <th>Cargo</th>
-                            <th>Dependencia</th>
+                            <th>Dirección</th>
+                            <th>Área</th>
                             <th>Activos</th>
                             <th>Formato</th>
                             <th>Acciones</th>
@@ -78,7 +79,8 @@ $qBase = function ($over = []) {
                                 <td><strong><?php echo htmlspecialchars($t['nombre_completo']); ?></strong></td>
                                 <td><?php echo htmlspecialchars($t['documento_identidad']); ?></td>
                                 <td><?php echo htmlspecialchars($t['cargo'] ?: '—'); ?></td>
-                                <td><?php echo htmlspecialchars($t['dependencia'] ?: '—'); ?></td>
+                                <td><?php echo htmlspecialchars($t['direccion'] ?? '' ?: ($t['dependencia'] ?? '' ?: '—')); ?></td>
+                                <td><?php echo htmlspecialchars($t['area'] ?? '' ?: '—'); ?></td>
                                 <td style="text-align:center;">
                                     <?php if ((int)$t['total_activos'] > 0): ?>
                                         <span class="badge badge-info"><i class="fas fa-box"></i> <?php echo (int)$t['total_activos']; ?></span>

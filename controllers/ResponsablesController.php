@@ -187,10 +187,21 @@ class ResponsablesController {
         $this->modelo->nombre_completo = mb_strtoupper(trim($_POST['nombre_completo'] ?? ''), 'UTF-8');
         $this->modelo->documento_identidad = trim($_POST['documento_identidad'] ?? '');
         $this->modelo->cargo = trim($_POST['cargo'] ?? '');
-        $this->modelo->dependencia = trim($_POST['dependencia'] ?? '');
+        $direccion = trim($_POST['direccion'] ?? '');
+        $area = trim($_POST['area'] ?? '');
+        // Validar dirección y área contra el catálogo oficial
+        $catalogo = defined('DIRECCIONES_AREAS') ? DIRECCIONES_AREAS : [];
+        if ($direccion !== '' && !array_key_exists($direccion, $catalogo)) {
+            $direccion = '';
+            $area = '';
+        } elseif ($area !== '' && !in_array($area, $catalogo[$direccion] ?? [], true)) {
+            $area = '';
+        }
+        $this->modelo->direccion = $direccion;
+        $this->modelo->area = $area;
+        $this->modelo->dependencia = $direccion; // Espejo por compatibilidad con reportes anteriores
         $this->modelo->tipo_vinculacion = trim($_POST['tipo_vinculacion'] ?? '');
         $this->modelo->centro_costo = trim($_POST['centro_costo'] ?? '');
-        $this->modelo->jefe_inmediato = trim($_POST['jefe_inmediato'] ?? '');
         $fing = trim($_POST['fecha_ingreso'] ?? '');
         $this->modelo->fecha_ingreso = ($fing !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fing)) ? $fing : null;
         $this->modelo->usuario_creacion = $_SESSION['usuario_id'] ?? null;

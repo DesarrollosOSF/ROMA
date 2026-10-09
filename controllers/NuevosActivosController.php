@@ -8,17 +8,32 @@
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../models/NuevoActivo.php';
 require_once __DIR__ . '/../models/CategoriaInventario.php';
+require_once __DIR__ . '/../models/Almacen.php';
 require_once __DIR__ . '/../models/Usuario.php';
 require_once __DIR__ . '/AuthController.php';
 
 class NuevosActivosController {
     private $modelo;
     private $categorias;
+    private $almacenes;
 
     public function __construct() {
         AuthController::verificarAutenticacion();
         $this->modelo = new NuevoActivo();
         $this->categorias = new CategoriaInventario();
+        try {
+            $this->almacenes = new Almacen();
+        } catch (Exception $e) {
+            $this->almacenes = null;
+        }
+    }
+
+    private function listaAlmacenes() {
+        try {
+            return $this->almacenes ? $this->almacenes->listar() : [];
+        } catch (Exception $e) {
+            return [];
+        }
     }
 
     private function puedeVer() {
@@ -120,6 +135,7 @@ class NuevosActivosController {
         $idCategoriaPre = (int)($_GET['categoria'] ?? 0);
         require_once __DIR__ . '/../models/TrabajadorResponsable.php';
         $listaTrabajadores = (new TrabajadorResponsable())->listar(['limit' => 2000]);
+        $listaAlmacenes = $this->listaAlmacenes();
         require_once __DIR__ . '/../views/nuevos_activos/form.php';
     }
 
@@ -162,7 +178,18 @@ class NuevosActivosController {
             header('Location: index.php?action=nuevos_activos&subaction=crear&categoria=' . $idCat);
             exit;
         }
+        $idAlm = (int)($_POST['id_almacen'] ?? 0);
+        if ($estado === 'almacen' && ($idAlm <= 0 || !$this->almacenes || !$this->almacenes->obtenerPorId($idAlm))) {
+            $_SESSION['mensaje'] = 'Si el estado es En almacén, seleccione la bodega.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=nuevos_activos&subaction=crear&categoria=' . $idCat);
+            exit;
+        }
+        if ($estado !== 'almacen') {
+            $idAlm = null;
+        }
         $this->modelo->id_categoria = $idCat;
+        $this->modelo->id_almacen = $idAlm;
         $this->modelo->id_trabajador = $this->validarTrabajador((int)($_POST['id_trabajador'] ?? 0));
         $this->modelo->codigo = $codigo;
         $this->modelo->codigo_serial = trim($_POST['codigo_serial'] ?? '');
@@ -175,7 +202,6 @@ class NuevosActivosController {
         $this->modelo->nombre = mb_strtoupper($nombre, 'UTF-8');
         $this->modelo->sede = trim($_POST['sede'] ?? '');
         $this->modelo->estado = $estado;
-        $this->modelo->responsable_general = trim($_POST['responsable_general'] ?? '');
         $this->modelo->usuario_creacion = $_SESSION['usuario_id'] ?? null;
         $this->modelo->origen_auditoria = 'web';
         try {
@@ -206,6 +232,7 @@ class NuevosActivosController {
         $historial = $this->modelo->obtenerAuditoria(['id_nuevo_activo' => (int)$id, 'limit' => 50]);
         $etiquetas = NuevoActivo::camposAuditables();
         $estados = NuevoActivo::estados();
+        $listaAlmacenes = $this->listaAlmacenes();
         require_once __DIR__ . '/../views/nuevos_activos/detalle.php';
     }
 
@@ -222,6 +249,7 @@ class NuevosActivosController {
         $estados = NuevoActivo::estados();
         require_once __DIR__ . '/../models/TrabajadorResponsable.php';
         $listaTrabajadores = (new TrabajadorResponsable())->listar(['limit' => 2000]);
+        $listaAlmacenes = $this->listaAlmacenes();
         require_once __DIR__ . '/../views/nuevos_activos/form.php';
     }
 
@@ -265,9 +293,20 @@ class NuevosActivosController {
             header("Location: index.php?action=nuevos_activos&subaction=editar&id=$id");
             exit;
         }
+        $idAlm = (int)($_POST['id_almacen'] ?? 0);
+        if ($estado === 'almacen' && ($idAlm <= 0 || !$this->almacenes || !$this->almacenes->obtenerPorId($idAlm))) {
+            $_SESSION['mensaje'] = 'Si el estado es En almacén, seleccione la bodega.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header("Location: index.php?action=nuevos_activos&subaction=editar&id=$id");
+            exit;
+        }
+        if ($estado !== 'almacen') {
+            $idAlm = null;
+        }
         $this->modelo->id_nuevo_activo = (int)$id;
         $this->modelo->id_categoria = $idCat;
         $this->modelo->id_trabajador = $this->validarTrabajador((int)($_POST['id_trabajador'] ?? 0));
+        $this->modelo->id_almacen = $idAlm;
         $this->modelo->codigo = $codigo;
         $this->modelo->codigo_serial = trim($_POST['codigo_serial'] ?? '');
         $this->modelo->codigo_placa = trim($_POST['codigo_placa'] ?? '');
@@ -279,7 +318,6 @@ class NuevosActivosController {
         $this->modelo->nombre = mb_strtoupper($nombre, 'UTF-8');
         $this->modelo->sede = trim($_POST['sede'] ?? '');
         $this->modelo->estado = $estado;
-        $this->modelo->responsable_general = trim($_POST['responsable_general'] ?? '');
         $this->modelo->usuario_creacion = $_SESSION['usuario_id'] ?? null;
         $this->modelo->origen_auditoria = 'web';
         try {
@@ -582,7 +620,7 @@ class NuevosActivosController {
         $enc = array_map(function ($x) {
             return strtolower(trim($x));
         }, fgetcsv($h, 0, $delim));
-        $cols = ['categoria','codigo','codigo_serial','codigo_placa','fecha_ingreso','codigo_cuenta_contable','codigo_grupo_activo_fijo','descripcion','valor','nombre','sede','estado','responsable_general','documento_responsable'];
+        $cols = ['categoria','codigo','codigo_serial','codigo_placa','fecha_ingreso','codigo_cuenta_contable','codigo_grupo_activo_fijo','descripcion','valor','nombre','sede','estado','documento_responsable'];
         $map = [];
         foreach ($cols as $c) {
             $i = array_search($c, $enc, true);
@@ -695,7 +733,6 @@ class NuevosActivosController {
                 $this->modelo->nombre = mb_strtoupper($nombre, 'UTF-8');
                 $this->modelo->sede = $get('sede');
                 $this->modelo->estado = $estado;
-                $this->modelo->responsable_general = $get('responsable_general');
                 $this->modelo->usuario_creacion = $usuarioId;
                 $this->modelo->origen_auditoria = 'carga_masiva';
                 $this->modelo->crear();
@@ -767,9 +804,10 @@ class NuevosActivosController {
             'documento_identidad' => $t['documento_identidad'],
             'cargo' => $t['cargo'],
             'dependencia' => $t['dependencia'],
+            'direccion' => $t['direccion'] ?? $t['dependencia'],
+            'area' => $t['area'] ?? null,
             'tipo_vinculacion' => $t['tipo_vinculacion'],
             'centro_costo' => $t['centro_costo'],
-            'jefe_inmediato' => $t['jefe_inmediato'],
             'fecha_ingreso' => $t['fecha_ingreso'],
             'activos' => array_map(function ($a) {
                 return (int)$a['id_nuevo_activo'];
@@ -793,10 +831,10 @@ class NuevosActivosController {
             'nombre' => trim($_POST['trab_nombre'] ?? ''),
             'documento' => trim($_POST['trab_documento'] ?? ''),
             'cargo' => trim($_POST['trab_cargo'] ?? ''),
+            'direccion' => trim($_POST['trab_direccion'] ?? ''),
             'area' => trim($_POST['trab_area'] ?? ''),
             'vinculacion' => trim($_POST['trab_vinculacion'] ?? ''),
             'centro_costo' => trim($_POST['trab_centro_costo'] ?? ''),
-            'jefe' => trim($_POST['trab_jefe'] ?? ''),
             'ingreso' => trim($_POST['trab_ingreso'] ?? ''),
         ];
         if ($trabajador['nombre'] === '' || $trabajador['documento'] === '') {
@@ -870,6 +908,137 @@ class NuevosActivosController {
             'generado_por' => $_SESSION['usuario_nombre'] ?? '',
         ];
         require_once __DIR__ . '/../views/nuevos_activos/formato_pdf.php';
+    }
+
+    /** Panel del Almacén: bodegas y activos con estado 'almacen' */
+    public function almacen() {
+        $this->exigirVer();
+        $idAlmacen = (int)($_GET['almacen'] ?? 0);
+        $busqueda = trim($_GET['busqueda'] ?? '');
+        $listaAlmacenes = $this->listaAlmacenes();
+        if ($idAlmacen > 0 && $this->almacenes && !$this->almacenes->obtenerPorId($idAlmacen)) {
+            $idAlmacen = 0;
+        }
+        $filtros = ['busqueda' => $busqueda];
+        if ($idAlmacen > 0) {
+            $filtros['id_almacen'] = $idAlmacen;
+        }
+        $activos = $this->modelo->listarEnAlmacen($filtros);
+        $total = $this->modelo->contarEnAlmacen($idAlmacen ?: null);
+        $estados = NuevoActivo::estados();
+        $puedeGestionar = $this->puedeGestionar();
+        require_once __DIR__ . '/../views/nuevos_activos/almacen.php';
+    }
+
+    public function crearAlmacen() {
+        $this->exigirGestion();
+        require_once __DIR__ . '/../views/nuevos_activos/almacen_form.php';
+    }
+
+    public function guardarAlmacen() {
+        $this->exigirGestion();
+        if (!$this->almacenes) {
+            $_SESSION['mensaje'] = 'Módulo de almacenes no disponible (ejecute la migración).';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=nuevos_activos&subaction=almacen');
+            exit;
+        }
+        try {
+            $this->almacenes->crear(
+                $_POST['nombre'] ?? '',
+                trim($_POST['descripcion'] ?? ''),
+                trim($_POST['responsable'] ?? ''),
+                $_SESSION['usuario_id'] ?? null
+            );
+            $_SESSION['mensaje'] = 'Almacén creado correctamente';
+            $_SESSION['tipo_mensaje'] = 'success';
+        } catch (Exception $e) {
+            $_SESSION['mensaje'] = 'Error al crear almacén: ' . $e->getMessage();
+            $_SESSION['tipo_mensaje'] = 'error';
+        }
+        header('Location: index.php?action=nuevos_activos&subaction=almacen');
+    }
+
+    public function editarAlmacen($id) {
+        $this->exigirGestion();
+        $almacen = $this->almacenes ? $this->almacenes->obtenerPorId($id) : null;
+        if (!$almacen) {
+            $_SESSION['mensaje'] = 'Almacén no encontrado';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=nuevos_activos&subaction=almacen');
+            exit;
+        }
+        require_once __DIR__ . '/../views/nuevos_activos/almacen_form.php';
+    }
+
+    public function actualizarAlmacen($id) {
+        $this->exigirGestion();
+        try {
+            $this->almacenes->actualizar(
+                $id,
+                $_POST['nombre'] ?? '',
+                trim($_POST['descripcion'] ?? ''),
+                trim($_POST['responsable'] ?? '')
+            );
+            $_SESSION['mensaje'] = 'Almacén actualizado correctamente';
+            $_SESSION['tipo_mensaje'] = 'success';
+        } catch (Exception $e) {
+            $_SESSION['mensaje'] = 'Error al actualizar almacén: ' . $e->getMessage();
+            $_SESSION['tipo_mensaje'] = 'error';
+        }
+        header('Location: index.php?action=nuevos_activos&subaction=almacen');
+    }
+
+    public function eliminarAlmacen($id) {
+        $this->exigirGestion();
+        try {
+            $this->almacenes->eliminar($id);
+            $_SESSION['mensaje'] = 'Almacén eliminado correctamente';
+            $_SESSION['tipo_mensaje'] = 'success';
+        } catch (Exception $e) {
+            $_SESSION['mensaje'] = 'No se pudo eliminar: ' . $e->getMessage();
+            $_SESSION['tipo_mensaje'] = 'error';
+        }
+        header('Location: index.php?action=nuevos_activos&subaction=almacen');
+    }
+
+    /** Enviar un activo al almacén (estado almacen + bodega) */
+    public function enviarAlmacen($id) {
+        $this->exigirGestion();
+        $activo = $this->modelo->obtenerPorId($id);
+        if (!$activo) {
+            $_SESSION['mensaje'] = 'Activo no encontrado';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=nuevos_activos');
+            exit;
+        }
+        $idAlm = (int)($_POST['id_almacen'] ?? 0);
+        if ($idAlm <= 0 || !$this->almacenes || !$this->almacenes->obtenerPorId($idAlm)) {
+            $_SESSION['mensaje'] = 'Seleccione una bodega válida.';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header("Location: index.php?action=nuevos_activos&subaction=ver&id=$id");
+            exit;
+        }
+        $this->modelo->enviarAlmacen((int)$id, $idAlm, $_SESSION['usuario_id'] ?? null);
+        $_SESSION['mensaje'] = 'Activo enviado al almacén correctamente';
+        $_SESSION['tipo_mensaje'] = 'success';
+        header("Location: index.php?action=nuevos_activos&subaction=ver&id=$id");
+    }
+
+    /** Retirar un activo del almacén (vuelve a operativo) */
+    public function retirarAlmacen($id) {
+        $this->exigirGestion();
+        $activo = $this->modelo->obtenerPorId($id);
+        if (!$activo) {
+            $_SESSION['mensaje'] = 'Activo no encontrado';
+            $_SESSION['tipo_mensaje'] = 'error';
+            header('Location: index.php?action=nuevos_activos');
+            exit;
+        }
+        $this->modelo->retirarAlmacen((int)$id, $_SESSION['usuario_id'] ?? null);
+        $_SESSION['mensaje'] = 'Activo retirado del almacén (ahora operativo)';
+        $_SESSION['tipo_mensaje'] = 'success';
+        header('Location: index.php?action=nuevos_activos&subaction=almacen');
     }
 
     /** Auditoría de nuevos activos (quién/qué/cuándo) */

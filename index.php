@@ -246,6 +246,50 @@ try {
                         $controller->index();
                     }
                     break;
+                case 'almacen':
+                    $controller->almacen();
+                    break;
+                case 'crear_almacen':
+                    $controller->crearAlmacen();
+                    break;
+                case 'guardar_almacen':
+                    $controller->guardarAlmacen();
+                    break;
+                case 'editar_almacen':
+                    if ($id) {
+                        $controller->editarAlmacen($id);
+                    } else {
+                        $controller->almacen();
+                    }
+                    break;
+                case 'actualizar_almacen':
+                    if ($id) {
+                        $controller->actualizarAlmacen($id);
+                    } else {
+                        $controller->almacen();
+                    }
+                    break;
+                case 'eliminar_almacen':
+                    if ($id) {
+                        $controller->eliminarAlmacen($id);
+                    } else {
+                        $controller->almacen();
+                    }
+                    break;
+                case 'enviar_almacen':
+                    if ($id) {
+                        $controller->enviarAlmacen($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
+                case 'retirar_almacen':
+                    if ($id) {
+                        $controller->retirarAlmacen($id);
+                    } else {
+                        $controller->index();
+                    }
+                    break;
                 case 'subir_adjunto':
                     if ($id) {
                         $controller->subirAdjunto($id);

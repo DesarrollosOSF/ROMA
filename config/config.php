@@ -118,6 +118,18 @@ define('ASSIGNED_AREAS', [
     'recaudo_cartera' => 'Recaudo y Cartera'
 ]);
 
+// Direcciones de la organización y sus áreas (responsables de activos y formato)
+define('DIRECCIONES_AREAS', [
+    'Operaciones' => ['Parque', 'Mantenimiento', 'Operaciones', 'Vehículos'],
+    'Servicios' => ['Servicios', 'SerFUN', 'Servicios Generales', 'Coordinación de servicios'],
+    'Financiera' => ['Recaudo', 'Compras', 'Tesorería', 'Contabilidad', 'Sedes', 'SENA'],
+    'Gerencia General' => ['Gerencia General', 'Control Interno', 'B.I', 'Jurídica'],
+    'Comercial Previsión' => ['Comercial Previsión', 'Mercadeo'],
+    'Comercial Parque Memorial' => ['Comercial Parque Memorial'],
+    'Administrativa y TH' => ['Talento Humano', 'Gestión Documental', 'Sistemas', 'SIG'],
+    'Experiencia' => ['Experiencia'],
+]);
+
 // Ubicaciones predefinidas para activos
 define('ASSET_LOCATIONS', [
     'Sede principal Tunja',

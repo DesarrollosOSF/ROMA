@@ -106,6 +106,9 @@
                             <i class="fas fa-file-upload"></i> Carga Masiva
                         </a></li>
                         <?php endif; ?>
+                        <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=almacen">
+                            <i class="fas fa-warehouse"></i> Almacén
+                        </a></li>
                         <?php if (Usuario::tienePermiso($rol_actual, 'generar_formato_nuevos')): ?>
                         <li><a href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=formato">
                             <i class="fas fa-file-pdf"></i> Formato Inventario

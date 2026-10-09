@@ -29,7 +29,7 @@ unset($_SESSION['resumen_carga_nuevos'], $_SESSION['detalle_carga_nuevos']);
             <code>fecha_ingreso</code>, <code>codigo_cuenta_contable</code>, <code>codigo_grupo_activo_fijo</code>,
             <code>descripcion</code>, <code>valor</code>, <code>nombre*</code>,
             <code>sede</code>, <code>estado</code> (operativo, en_reparacion, fuera_servicio, en_baja),
-            <code>responsable_general</code> (jefe inmediato), <code>documento_responsable</code> (documento del trabajador registrado; opcional)
+            <code>documento_responsable</code> (documento del trabajador registrado; opcional)
         </div>
         <?php if (!empty($listaCategorias)): ?>
             <p><strong>Grupos disponibles (claves):</strong>

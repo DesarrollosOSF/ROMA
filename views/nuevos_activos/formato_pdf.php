@@ -77,14 +77,14 @@ $fd = function ($v) {
         </tr>
         <tr>
             <td><span class="label">Cargo:</span> <?php echo htmlspecialchars($f($t['cargo'])); ?></td>
-            <td><span class="label">Área / Dependencia:</span> <?php echo htmlspecialchars($f($t['area'])); ?></td>
+            <td><span class="label">Dirección:</span> <?php echo htmlspecialchars($f($t['direccion'] ?? $t['area'])); ?></td>
         </tr>
         <tr>
+            <td><span class="label">Área:</span> <?php echo htmlspecialchars($f($t['area'])); ?></td>
             <td><span class="label">Tipo de Vinculación:</span> <?php echo htmlspecialchars($f($t['vinculacion'])); ?></td>
-            <td><span class="label">Centro de Costo:</span> <?php echo htmlspecialchars($f($t['centro_costo'])); ?></td>
         </tr>
         <tr>
-            <td><span class="label">Jefe Inmediato:</span> <?php echo htmlspecialchars($f($t['jefe'])); ?></td>
+            <td><span class="label">Centro de Costo:</span> <?php echo htmlspecialchars($f($t['centro_costo'])); ?></td>
             <td><span class="label">Fecha de Ingreso:</span> <?php echo htmlspecialchars($fd($t['ingreso'])); ?></td>
         </tr>
     </table>

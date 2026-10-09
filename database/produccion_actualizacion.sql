@@ -18,13 +18,15 @@
 -- INCLUYE (en orden seguro por llaves foráneas):
 --  A) Rol 'superadmin' en usuarios (sin tocar usuarios existentes)
 --  B) Tabla categorias_inventario + 7 grupos de activos
---  C) Tabla trabajadores_responsables
+--  C) Tabla trabajadores_responsables (+ direccion y area)
 --  D) Tabla nuevos_activos (esquema final: sin observaciones ni
 --     responsable_secundario, con fecha_ingreso, códigos contables,
---     descripcion, valor, codigo_placa e id_trabajador)
+--     descripcion, valor, codigo_placa, id_trabajador e id_almacen)
 --  E) Tablas nuevos_activos_auditoria, nuevos_activos_adjuntos,
 --     trabajadores_movimientos
 --  F) Columna origen en activos_auditoria + índices
+--  G) Estado 'almacen', tabla almacenes (San Rafael y COL),
+--     id_almacen en nuevos_activos
 -- ============================================
 
 -- ============ A) Rol superadmin (no modifica usuarios existentes) ============
@@ -60,6 +62,8 @@ CREATE TABLE IF NOT EXISTS trabajadores_responsables (
     documento_identidad VARCHAR(50) NOT NULL,
     cargo VARCHAR(150) NULL,
     dependencia VARCHAR(150) NULL,
+    direccion VARCHAR(150) NULL COMMENT 'Dirección a la que pertenece (catálogo)',
+    area VARCHAR(150) NULL COMMENT 'Área según la dirección',
     tipo_vinculacion VARCHAR(150) NULL,
     centro_costo VARCHAR(100) NULL,
     jefe_inmediato VARCHAR(255) NULL,
@@ -76,11 +80,31 @@ CREATE TABLE IF NOT EXISTS trabajadores_responsables (
     INDEX idx_trab_activo (activo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============ C2) Tabla de almacenes (bodegas: antes de nuevos_activos por la FK) ============
+CREATE TABLE IF NOT EXISTS almacenes (
+    id_almacen INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    clave VARCHAR(100) NOT NULL UNIQUE COMMENT 'slug sin espacios: san_rafael, col...',
+    descripcion TEXT NULL,
+    responsable VARCHAR(255) NULL,
+    activo TINYINT(1) DEFAULT 1,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    usuario_creacion INT NULL,
+    FOREIGN KEY (usuario_creacion) REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
+    INDEX idx_alm_activo (activo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO almacenes (nombre, clave, descripcion) VALUES
+('San Rafael', 'san_rafael', 'Bodega San Rafael'),
+('COL', 'col', 'Bodega COL (Centro de Operaciones)')
+ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), descripcion = VALUES(descripcion);
+
 -- ============ D) Nuevos activos (esquema final) ============
 CREATE TABLE IF NOT EXISTS nuevos_activos (
     id_nuevo_activo INT AUTO_INCREMENT PRIMARY KEY,
     id_categoria INT NOT NULL,
     id_trabajador INT NULL COMMENT 'Trabajador responsable asociado (opcional)',
+    id_almacen INT NULL COMMENT 'Bodega donde está el activo (estado almacen)',
     codigo VARCHAR(100) NOT NULL COMMENT 'Código interno / placa',
     codigo_serial VARCHAR(150) NULL COMMENT 'Código serial del fabricante',
     codigo_placa VARCHAR(100) NULL COMMENT 'Código de placa del activo (opcional)',
@@ -91,7 +115,7 @@ CREATE TABLE IF NOT EXISTS nuevos_activos (
     descripcion TEXT NULL,
     valor DECIMAL(15,2) NULL DEFAULT NULL,
     sede VARCHAR(255) NULL COMMENT 'Sede donde se encuentra',
-    estado ENUM('operativo','en_reparacion','fuera_servicio','en_baja') DEFAULT 'operativo',
+    estado ENUM('operativo','en_reparacion','fuera_servicio','en_baja','almacen') DEFAULT 'operativo',
     responsable_general VARCHAR(255) NULL COMMENT 'Jefe inmediato',
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -100,11 +124,13 @@ CREATE TABLE IF NOT EXISTS nuevos_activos (
     activo TINYINT(1) DEFAULT 1 COMMENT '1 vigente, 0 eliminado lógico',
     FOREIGN KEY (id_categoria) REFERENCES categorias_inventario(id_categoria) ON DELETE RESTRICT,
     FOREIGN KEY (id_trabajador) REFERENCES trabajadores_responsables(id_trabajador) ON DELETE SET NULL,
+    FOREIGN KEY (id_almacen) REFERENCES almacenes(id_almacen) ON DELETE SET NULL,
     FOREIGN KEY (usuario_creacion) REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
     FOREIGN KEY (usuario_actualizacion) REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
     UNIQUE KEY uq_nuevos_codigo (codigo),
     INDEX idx_nuevos_categoria (id_categoria),
     INDEX idx_nuevos_trabajador (id_trabajador),
+    INDEX idx_nuevos_almacen (id_almacen),
     INDEX idx_nuevos_estado (estado),
     INDEX idx_nuevos_sede (sede),
     INDEX idx_nuevos_nombre (nombre)
@@ -269,7 +295,56 @@ PREPARE stmt FROM @sql_idxtrab;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- ============ G) 7 grupos de activos principales (no duplica si ya existen) ============
+-- ============ G0) Dirección y área del trabajador (conserva dependencia) ============
+SET @tiene_dir := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trabajadores_responsables' AND COLUMN_NAME = 'direccion');
+SET @sql_dir := IF(@tiene_dir = 0,
+  'ALTER TABLE trabajadores_responsables ADD COLUMN direccion VARCHAR(150) NULL AFTER dependencia',
+  'SELECT ''Columna direccion ya existe''');
+PREPARE stmt FROM @sql_dir;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @tiene_area := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trabajadores_responsables' AND COLUMN_NAME = 'area');
+SET @sql_area := IF(@tiene_area = 0,
+  'ALTER TABLE trabajadores_responsables ADD COLUMN area VARCHAR(150) NULL AFTER direccion',
+  'SELECT ''Columna area ya existe''');
+PREPARE stmt FROM @sql_area;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- ============ G1) Estado 'almacen' en nuevos_activos ============
+SET @tiene_est_alm := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nuevos_activos'
+    AND COLUMN_NAME = 'estado' AND COLUMN_TYPE LIKE '%almacen%');
+SET @sql_est_alm := IF(@tiene_est_alm = 0,
+  'ALTER TABLE nuevos_activos MODIFY COLUMN estado ENUM(''operativo'',''en_reparacion'',''fuera_servicio'',''en_baja'',''almacen'') DEFAULT ''operativo''',
+  'SELECT ''Estado almacen ya existe''');
+PREPARE stmt FROM @sql_est_alm;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- ============ G2) Bodega del activo (solo si la tabla ya existía sin la columna) ============
+SET @tiene_idalm := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nuevos_activos' AND COLUMN_NAME = 'id_almacen');
+SET @sql_idalm := IF(@tiene_idalm = 0,
+  'ALTER TABLE nuevos_activos ADD COLUMN id_almacen INT NULL AFTER id_trabajador, ADD CONSTRAINT fk_nuevos_almacen FOREIGN KEY (id_almacen) REFERENCES almacenes(id_almacen) ON DELETE SET NULL',
+  'SELECT ''Columna id_almacen ya existe''');
+PREPARE stmt FROM @sql_idalm;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @tiene_idxalm := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nuevos_activos' AND INDEX_NAME = 'idx_nuevos_almacen');
+SET @sql_idxalm := IF(@tiene_idxalm = 0,
+  'CREATE INDEX idx_nuevos_almacen ON nuevos_activos (id_almacen)',
+  'SELECT ''Indice idx_nuevos_almacen ya existe''');
+PREPARE stmt FROM @sql_idxalm;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- ============ H) 7 grupos de activos principales (no duplica si ya existen) ============
 INSERT INTO categorias_inventario (nombre, clave, descripcion, icono, color) VALUES
 ('Edificios y construcciones', 'edificios_y_construcciones', 'Inmuebles, edificaciones y construcciones de la organización', 'building', 'primary'),
 ('Maquinaria y equipo', 'maquinaria_y_equipo', 'Maquinaria y equipos de operación', 'cogs', 'warning'),
@@ -283,4 +358,4 @@ ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), descripcion = VALUES(descripcio
 -- ============ PASO FINAL: asignar super administrador ============
 -- Descomente y ajuste la siguiente línea con el correo del usuario que será
 -- super administrador (el único que podrá crear/editar/eliminar activos nuevos):
-UPDATE usuarios SET rol = 'superadmin' WHERE email = 'aprendiz.sistemas@osf.com.co';
+-- UPDATE usuarios SET rol = 'superadmin' WHERE email = 'correo@osf.com.co';

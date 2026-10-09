@@ -2,6 +2,9 @@
 $isEdit = isset($trabajador) && is_array($trabajador);
 $page_title = $isEdit ? 'Editar Responsable' : 'Nuevo Responsable';
 require_once __DIR__ . '/../layout/header.php';
+$dirSel = $isEdit ? ($trabajador['direccion'] ?? '') : '';
+$areaSel = $isEdit ? ($trabajador['area'] ?? '') : '';
+$catalogoDir = defined('DIRECCIONES_AREAS') ? DIRECCIONES_AREAS : [];
 ?>
 
 <div class="page-header">
@@ -27,11 +30,19 @@ require_once __DIR__ . '/../layout/header.php';
                     <input type="text" name="cargo" value="<?php echo htmlspecialchars($trabajador['cargo'] ?? ''); ?>" placeholder="Ej: Auxiliar Administrativo">
                 </div>
                 <div class="form-group">
-                    <label>Dependencia</label>
-                    <input type="text" name="dependencia" value="<?php echo htmlspecialchars($trabajador['dependencia'] ?? ''); ?>" placeholder="Ej: Sistemas" list="depList">
-                    <datalist id="depList">
-                        <?php foreach (ASSIGNED_AREAS as $a): ?><option value="<?php echo htmlspecialchars($a); ?>"><?php endforeach; ?>
-                    </datalist>
+                    <label>Dirección a la que pertenece</label>
+                    <select name="direccion" id="selDireccion" onchange="cargarAreas(true)">
+                        <option value="">Seleccione...</option>
+                        <?php foreach ($catalogoDir as $dir => $areas): ?>
+                            <option value="<?php echo htmlspecialchars($dir); ?>" <?php echo ($dirSel === $dir) ? 'selected' : ''; ?>><?php echo htmlspecialchars($dir); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Área a la que pertenece</label>
+                    <select name="area" id="selArea">
+                        <option value="">Seleccione primero la dirección...</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Tipo de Vinculación</label>
@@ -40,10 +51,6 @@ require_once __DIR__ . '/../layout/header.php';
                 <div class="form-group">
                     <label>Centro de Costo</label>
                     <input type="text" name="centro_costo" value="<?php echo htmlspecialchars($trabajador['centro_costo'] ?? ''); ?>" placeholder="Ej: CC-001">
-                </div>
-                <div class="form-group">
-                    <label>Jefe Inmediato</label>
-                    <input type="text" name="jefe_inmediato" value="<?php echo htmlspecialchars($trabajador['jefe_inmediato'] ?? ''); ?>" placeholder="Ej: María García">
                 </div>
                 <div class="form-group">
                     <label>Fecha de Ingreso</label>
@@ -57,5 +64,24 @@ require_once __DIR__ . '/../layout/header.php';
         </form>
     </div>
 </div>
+
+<script>
+const AREAS_POR_DIRECCION = <?php echo json_encode($catalogoDir, JSON_UNESCAPED_UNICODE); ?>;
+const AREA_PRESEL = <?php echo json_encode($areaSel, JSON_UNESCAPED_UNICODE); ?>;
+function cargarAreas(reset) {
+    const dir = document.getElementById('selDireccion').value;
+    const sel = document.getElementById('selArea');
+    sel.innerHTML = '<option value="">Seleccione...</option>';
+    (AREAS_POR_DIRECCION[dir] || []).forEach(function (a) {
+        const op = document.createElement('option');
+        op.value = a;
+        op.textContent = a;
+        if (a === AREA_PRESEL) op.selected = true;
+        sel.appendChild(op);
+    });
+    if (reset) sel.selectedIndex = 0;
+}
+document.addEventListener('DOMContentLoaded', function () { cargarAreas(false); });
+</script>
 
 <?php require_once __DIR__ . '/../layout/footer.php'; ?>

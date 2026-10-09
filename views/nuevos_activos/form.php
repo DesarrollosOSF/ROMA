@@ -28,12 +28,33 @@ $catSel = $isEdit ? ($activo['id_categoria'] ?? '') : ((int)($_GET['categoria'] 
                 </div>
                 <div class="form-group">
                     <label>Estado <span class="required">*</span></label>
-                    <select name="estado" required>
+                    <select name="estado" id="estadoActivo" required onchange="toggleAlmacen()">
                         <?php foreach ($estados as $k => $v): ?>
                             <option value="<?php echo $k; ?>" <?php echo (($isEdit ? ($activo['estado'] ?? '') : 'operativo') === $k) ? 'selected' : ''; ?>><?php echo $v; ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="form-group" id="grupoAlmacen" style="display:none;">
+                    <label>Bodega <span class="required">*</span></label>
+                    <select name="id_almacen" id="selAlmacen">
+                        <option value="">Seleccione la bodega...</option>
+                        <?php foreach (($listaAlmacenes ?? []) as $b): ?>
+                            <option value="<?php echo (int)$b['id_almacen']; ?>" <?php echo ((string)($isEdit ? ($activo['id_almacen'] ?? '') : '') === (string)$b['id_almacen']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($b['nombre']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small>Solo si el estado es En almacén.</small>
+                </div>
+                <script>
+                function toggleAlmacen() {
+                    var est = document.getElementById('estadoActivo');
+                    var g = document.getElementById('grupoAlmacen');
+                    if (!est || !g) return;
+                    g.style.display = (est.value === 'almacen') ? '' : 'none';
+                }
+                document.addEventListener('DOMContentLoaded', toggleAlmacen);
+                </script>
                 <div class="form-group">
                     <label>Código Activo Fijo <span class="required">*</span></label>
                     <input type="text" name="codigo" value="<?php echo htmlspecialchars($activo['codigo'] ?? ''); ?>" required placeholder="Ej: PC-001 o 00234">
@@ -60,7 +81,7 @@ $catSel = $isEdit ? ($activo['id_categoria'] ?? '') : ((int)($_GET['categoria'] 
                 </div>
                 <div class="form-group">
                     <label>Trabajador Responsable (asocia el activo)</label>
-                    <select name="id_trabajador">
+                    <select name="id_trabajador" id="selTrabajadorActivo" onchange="mostrarDirArea(this.value)">
                         <option value="">— Sin asociar —</option>
                         <?php foreach (($listaTrabajadores ?? []) as $tr): ?>
                             <option value="<?php echo (int)$tr['id_trabajador']; ?>" <?php echo ((string)($isEdit ? ($activo['id_trabajador'] ?? '') : '') === (string)$tr['id_trabajador']) ? 'selected' : ''; ?>>
@@ -68,12 +89,27 @@ $catSel = $isEdit ? ($activo['id_categoria'] ?? '') : ((int)($_GET['categoria'] 
                             </option>
                         <?php endforeach; ?>
                     </select>
-                    <small>Solo super admin gestiona este listado (Usuarios → Responsables de Activos).</small>
+                    <small id="infoDirArea" class="text-muted"></small>
                 </div>
-                <div class="form-group">
-                    <label>Jefe Inmediato</label>
-                    <input type="text" name="responsable_general" value="<?php echo htmlspecialchars($activo['responsable_general'] ?? ''); ?>" placeholder="Nombre del jefe inmediato">
-                </div>
+                <script>
+                function mostrarDirArea(id) {
+                    var info = document.getElementById('infoDirArea');
+                    if (!info) return;
+                    if (!id) { info.textContent = ''; return; }
+                    info.textContent = 'Cargando dirección y área...';
+                    fetch(window.BASE_URL + 'index.php?action=nuevos_activos&subaction=datos_trabajador&id=' + encodeURIComponent(id))
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (d.error) { info.textContent = ''; return; }
+                            info.textContent = 'Dirección: ' + (d.direccion || '—') + ' · Área: ' + (d.area || '—');
+                        })
+                        .catch(function () { info.textContent = ''; });
+                }
+                document.addEventListener('DOMContentLoaded', function () {
+                    var s = document.getElementById('selTrabajadorActivo');
+                    if (s && s.value) mostrarDirArea(s.value);
+                });
+                </script>
                 <div class="form-group">
                     <label>Fecha de Ingreso</label>
                     <input type="date" name="fecha_ingreso" value="<?php echo htmlspecialchars($activo['fecha_ingreso'] ?? ''); ?>">

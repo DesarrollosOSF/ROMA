@@ -13,6 +13,7 @@ class NuevoActivo {
     public $id_nuevo_activo;
     public $id_categoria;
     public $id_trabajador;
+    public $id_almacen;
     public $codigo;
     public $codigo_serial;
     public $codigo_placa;
@@ -24,7 +25,6 @@ class NuevoActivo {
     public $nombre;
     public $sede;
     public $estado = 'operativo';
-    public $responsable_general;
     public $usuario_creacion;
     public $origen_auditoria = 'web';
 
@@ -42,6 +42,7 @@ class NuevoActivo {
             'en_reparacion' => 'En reparación',
             'fuera_servicio' => 'Fuera de servicio',
             'en_baja' => 'En baja',
+            'almacen' => 'En almacén',
         ];
     }
 
@@ -49,6 +50,7 @@ class NuevoActivo {
         return [
             'id_categoria' => 'Categoría',
             'id_trabajador' => 'Trabajador responsable',
+            'id_almacen' => 'Almacén',
             'codigo' => 'Código',
             'codigo_serial' => 'Código serial',
             'codigo_placa' => 'Código de placa',
@@ -60,8 +62,16 @@ class NuevoActivo {
             'nombre' => 'Nombre',
             'sede' => 'Sede',
             'estado' => 'Estado',
-            'responsable_general' => 'Jefe inmediato',
         ];
+    }
+
+    private function tablaExiste($tabla) {
+        try {
+            $st = $this->conn->query("SHOW TABLES LIKE '" . str_replace("'", "", $tabla) . "'");
+            return ($st && $st->fetch()) ? true : false;
+        } catch (Exception $e) {
+            return false;
+        }
     }
 
     private $cacheTablaTrab = null;
@@ -81,13 +91,16 @@ class NuevoActivo {
     public function listar($filtros = []) {
         try {
             $conTrab = $this->tablaTrabajadoresExiste();
+            $conAlm = $this->tieneColumna('id_almacen') && $this->tablaExiste('almacenes');
             $selectTrab = $conTrab ? ", t.nombre_completo AS trabajador_nombre, t.documento_identidad AS trabajador_documento" : "";
             $joinTrab = $conTrab ? " LEFT JOIN trabajadores_responsables t ON t.id_trabajador = n.id_trabajador" : "";
+            $selectAlm = $conAlm ? ", al.nombre AS almacen_nombre" : "";
+            $joinAlm = $conAlm ? " LEFT JOIN almacenes al ON al.id_almacen = n.id_almacen" : "";
             $query = "SELECT n.*, c.nombre AS categoria_nombre, c.clave AS categoria_clave, c.icono AS categoria_icono, c.color AS categoria_color
-                      $selectTrab
+                      $selectTrab $selectAlm
                       FROM {$this->table} n
                       INNER JOIN categorias_inventario c ON c.id_categoria = n.id_categoria
-                      $joinTrab
+                      $joinTrab $joinAlm
                       WHERE n.activo = 1";
             $params = [];
             if (!empty($filtros['id_categoria'])) {
@@ -106,20 +119,28 @@ class NuevoActivo {
                 $query .= " AND n.id_trabajador = :trab";
                 $params[':trab'] = (int)$filtros['id_trabajador'];
             }
+            if (!empty($filtros['id_almacen']) && $conAlm) {
+                $query .= " AND n.id_almacen = :alm";
+                $params[':alm'] = (int)$filtros['id_almacen'];
+            }
+            if (!empty($filtros['solo_almacen']) && $this->tieneColumna('estado')) {
+                $query .= " AND n.estado = 'almacen'";
+            }
             if (!empty($filtros['busqueda'])) {
                 $b = '%' . $filtros['busqueda'] . '%';
-                if ($this->tieneColumna('codigo_placa')) {
-                    $query .= " AND (n.nombre LIKE :b1 OR n.codigo LIKE :b2 OR n.codigo_serial LIKE :b3
-                                OR n.responsable_general LIKE :b4 OR n.codigo_placa LIKE :b5)";
-                    $params[':b5'] = $b;
-                } else {
-                    $query .= " AND (n.nombre LIKE :b1 OR n.codigo LIKE :b2 OR n.codigo_serial LIKE :b3
-                                OR n.responsable_general LIKE :b4)";
-                }
+                $clausulas = ["n.nombre LIKE :b1", "n.codigo LIKE :b2", "n.codigo_serial LIKE :b3"];
                 $params[':b1'] = $b;
                 $params[':b2'] = $b;
                 $params[':b3'] = $b;
-                $params[':b4'] = $b;
+                if ($this->tieneColumna('responsable_general')) {
+                    $clausulas[] = "n.responsable_general LIKE :b4";
+                    $params[':b4'] = $b;
+                }
+                if ($this->tieneColumna('codigo_placa')) {
+                    $clausulas[] = "n.codigo_placa LIKE :b5";
+                    $params[':b5'] = $b;
+                }
+                $query .= " AND (" . implode(" OR ", $clausulas) . ")";
             }
             $query .= " ORDER BY n.fecha_creacion DESC";
             if (!empty($filtros['limit'])) {
@@ -132,7 +153,7 @@ class NuevoActivo {
             }
             $stmt = $this->conn->prepare($query);
             foreach ($params as $k => $v) {
-                $stmt->bindValue($k, $v, in_array($k, [':limit', ':offset', ':cat', ':trab'], true) ? PDO::PARAM_INT : PDO::PARAM_STR);
+                $stmt->bindValue($k, $v, in_array($k, [':limit', ':offset', ':cat', ':trab', ':alm'], true) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
             $stmt->execute();
             $res = $stmt->fetchAll();
@@ -176,15 +197,108 @@ class NuevoActivo {
         return $this->listar(['id_trabajador' => (int)$idTrabajador, 'limit' => 2000]);
     }
 
+    public function listarEnAlmacen($filtros = []) {
+        $filtros['solo_almacen'] = true;
+        if (empty($filtros['limit'])) {
+            $filtros['limit'] = 2000;
+        }
+        return $this->listar($filtros);
+    }
+
+    public function contarEnAlmacen($idAlmacen = null) {
+        try {
+            $query = "SELECT COUNT(*) AS total FROM {$this->table} n WHERE n.activo = 1 AND n.estado = 'almacen'";
+            $params = [];
+            if (!empty($idAlmacen) && $this->tieneColumna('id_almacen')) {
+                $query .= " AND n.id_almacen = :alm";
+                $params[':alm'] = (int)$idAlmacen;
+            }
+            $stmt = $this->conn->prepare($query);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_INT);
+            $stmt->execute();
+            return (int)($stmt->fetch()['total'] ?? 0);
+        } catch (Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Enviar un activo al almacén (estado = almacen + bodega).
+     */
+    public function enviarAlmacen($id, $idAlmacen, $usuarioId) {
+        $prev = null;
+        try {
+            $sp = $this->conn->prepare("SELECT * FROM {$this->table} WHERE id_nuevo_activo = :id LIMIT 1");
+            $sp->bindValue(':id', (int)$id, PDO::PARAM_INT);
+            $sp->execute();
+            $prev = $sp->fetch() ?: null;
+        } catch (Exception $e) {
+            $prev = null;
+        }
+        $conAlm = $this->tieneColumna('id_almacen');
+        $q = "UPDATE {$this->table} SET estado = 'almacen', "
+            . ($conAlm ? "id_almacen = :alm, " : "")
+            . "usuario_actualizacion = :u WHERE id_nuevo_activo = :id";
+        $s = $this->conn->prepare($q);
+        if ($conAlm) {
+            $s->bindValue(':alm', (int)$idAlmacen, PDO::PARAM_INT);
+        }
+        $s->bindValue(':u', $usuarioId ?: null, $usuarioId ? PDO::PARAM_INT : PDO::PARAM_STR);
+        $s->bindValue(':id', (int)$id, PDO::PARAM_INT);
+        $s->execute();
+        $prevUser = $this->usuario_creacion;
+        $this->usuario_creacion = $usuarioId;
+        $this->auditar('UPDATE', (int)$id, 'estado', $prev['estado'] ?? null, 'almacen');
+        if ($conAlm) {
+            $this->auditar('UPDATE', (int)$id, 'id_almacen', $prev['id_almacen'] ?? null, (int)$idAlmacen);
+        }
+        $this->usuario_creacion = $prevUser;
+        return true;
+    }
+
+    /**
+     * Retirar un activo del almacén (vuelve a operativo, sin bodega).
+     */
+    public function retirarAlmacen($id, $usuarioId) {
+        $prev = null;
+        try {
+            $sp = $this->conn->prepare("SELECT * FROM {$this->table} WHERE id_nuevo_activo = :id LIMIT 1");
+            $sp->bindValue(':id', (int)$id, PDO::PARAM_INT);
+            $sp->execute();
+            $prev = $sp->fetch() ?: null;
+        } catch (Exception $e) {
+            $prev = null;
+        }
+        $conAlm = $this->tieneColumna('id_almacen');
+        $q = "UPDATE {$this->table} SET estado = 'operativo', "
+            . ($conAlm ? "id_almacen = NULL, " : "")
+            . "usuario_actualizacion = :u WHERE id_nuevo_activo = :id";
+        $s = $this->conn->prepare($q);
+        $s->bindValue(':u', $usuarioId ?: null, $usuarioId ? PDO::PARAM_INT : PDO::PARAM_STR);
+        $s->bindValue(':id', (int)$id, PDO::PARAM_INT);
+        $s->execute();
+        $prevUser = $this->usuario_creacion;
+        $this->usuario_creacion = $usuarioId;
+        $this->auditar('UPDATE', (int)$id, 'estado', $prev['estado'] ?? null, 'operativo');
+        if ($conAlm) {
+            $this->auditar('UPDATE', (int)$id, 'id_almacen', $prev['id_almacen'] ?? null, 'Retirado del almacén');
+        }
+        $this->usuario_creacion = $prevUser;
+        return true;
+    }
+
     public function obtenerPorId($id) {
         $conTrab = $this->tablaTrabajadoresExiste();
+        $conAlm = $this->tieneColumna('id_almacen') && $this->tablaExiste('almacenes');
         $selectTrab = $conTrab ? ", t.nombre_completo AS trabajador_nombre, t.documento_identidad AS trabajador_documento" : "";
         $joinTrab = $conTrab ? " LEFT JOIN trabajadores_responsables t ON t.id_trabajador = n.id_trabajador" : "";
+        $selectAlm = $conAlm ? ", al.nombre AS almacen_nombre" : "";
+        $joinAlm = $conAlm ? " LEFT JOIN almacenes al ON al.id_almacen = n.id_almacen" : "";
         $q = "SELECT n.*, c.nombre AS categoria_nombre, c.clave AS categoria_clave
-              $selectTrab
+              $selectTrab $selectAlm
               FROM {$this->table} n
               INNER JOIN categorias_inventario c ON c.id_categoria = n.id_categoria
-              $joinTrab
+              $joinTrab $joinAlm
               WHERE n.id_nuevo_activo = :id AND n.activo = 1 LIMIT 1";
         $s = $this->conn->prepare($q);
         $s->bindValue(':id', (int)$id, PDO::PARAM_INT);
@@ -216,18 +330,23 @@ class NuevoActivo {
         $conNuevos = $this->tieneColumna('fecha_ingreso');
         $conTrab = $this->tieneColumna('id_trabajador');
         $conRespSec = $this->tieneColumna('responsable_secundario');
+        $conRespGen = $this->tieneColumna('responsable_general');
         $conPlaca = $this->tieneColumna('codigo_placa');
+        $conAlm = $this->tieneColumna('id_almacen');
         $q = "INSERT INTO {$this->table}
-              (id_categoria, " . ($conTrab ? "id_trabajador, " : "") . "codigo, codigo_serial, " . ($conPlaca ? "codigo_placa, " : "") . "nombre, "
+              (id_categoria, " . ($conTrab ? "id_trabajador, " : "") . ($conAlm ? "id_almacen, " : "") . "codigo, codigo_serial, " . ($conPlaca ? "codigo_placa, " : "") . "nombre, "
               . ($conNuevos ? "fecha_ingreso, codigo_cuenta_contable, codigo_grupo_activo_fijo, descripcion, valor, " : "")
-              . "sede, estado, responsable_general, " . ($conRespSec ? "responsable_secundario, " : "") . "usuario_creacion)
-              VALUES (:cat, " . ($conTrab ? ":trab, " : "") . ":cod, :ser, " . ($conPlaca ? ":placa, " : "") . ":nom, "
+              . "sede, estado, " . ($conRespGen ? "responsable_general, " : "") . ($conRespSec ? "responsable_secundario, " : "") . "usuario_creacion)
+              VALUES (:cat, " . ($conTrab ? ":trab, " : "") . ($conAlm ? ":alm, " : "") . ":cod, :ser, " . ($conPlaca ? ":placa, " : "") . ":nom, "
               . ($conNuevos ? ":fing, :ccc, :cgaf, :desc, :valor, " : "")
-              . ":sede, :est, :rg, " . ($conRespSec ? ":rs, " : "") . ":u)";
+              . ":sede, :est, " . ($conRespGen ? ":rg, " : "") . ($conRespSec ? ":rs, " : "") . ":u)";
         $s = $this->conn->prepare($q);
         $s->bindValue(':cat', (int)$this->id_categoria, PDO::PARAM_INT);
         if ($conTrab) {
             $s->bindValue(':trab', !empty($this->id_trabajador) ? (int)$this->id_trabajador : null, !empty($this->id_trabajador) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+        if ($conAlm) {
+            $s->bindValue(':alm', !empty($this->id_almacen) ? (int)$this->id_almacen : null, !empty($this->id_almacen) ? PDO::PARAM_INT : PDO::PARAM_STR);
         }
         $s->bindValue(':cod', trim($this->codigo));
         $s->bindValue(':ser', trim($this->codigo_serial ?? '') ?: null);
@@ -244,7 +363,10 @@ class NuevoActivo {
         }
         $s->bindValue(':sede', trim($this->sede ?? '') ?: null);
         $s->bindValue(':est', $this->estado ?: 'operativo');
-        $s->bindValue(':rg', trim($this->responsable_general ?? '') ?: null);
+        if ($conRespGen) {
+            // Compatibilidad con BD sin migrar: la columna existe pero el campo ya no se usa
+            $s->bindValue(':rg', null);
+        }
         if ($conRespSec) {
             // Compatibilidad con BD sin migrar: la columna existe pero el campo ya no se usa
             $s->bindValue(':rs', null);
@@ -271,14 +393,18 @@ class NuevoActivo {
         $conNuevos = $this->tieneColumna('fecha_ingreso');
         $conTrab = $this->tieneColumna('id_trabajador');
         $conRespSec = $this->tieneColumna('responsable_secundario');
+        $conRespGen = $this->tieneColumna('responsable_general');
         $conPlaca = $this->tieneColumna('codigo_placa');
+        $conAlm = $this->tieneColumna('id_almacen');
         $q = "UPDATE {$this->table} SET id_categoria = :cat, "
               . ($conTrab ? "id_trabajador = :trab, " : "")
+              . ($conAlm ? "id_almacen = :alm, " : "")
               . "codigo = :cod, codigo_serial = :ser, "
               . ($conPlaca ? "codigo_placa = :placa, " : "")
               . "nombre = :nom, "
               . ($conNuevos ? "fecha_ingreso = :fing, codigo_cuenta_contable = :ccc, codigo_grupo_activo_fijo = :cgaf, descripcion = :desc, valor = :valor, " : "")
-              . "sede = :sede, estado = :est, responsable_general = :rg, "
+              . "sede = :sede, estado = :est, "
+              . ($conRespGen ? "responsable_general = :rg, " : "")
               . ($conRespSec ? "responsable_secundario = :rs, " : "")
               . "usuario_actualizacion = :u
               WHERE id_nuevo_activo = :id";
@@ -286,6 +412,9 @@ class NuevoActivo {
         $s->bindValue(':cat', (int)$this->id_categoria, PDO::PARAM_INT);
         if ($conTrab) {
             $s->bindValue(':trab', !empty($this->id_trabajador) ? (int)$this->id_trabajador : null, !empty($this->id_trabajador) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+        if ($conAlm) {
+            $s->bindValue(':alm', !empty($this->id_almacen) ? (int)$this->id_almacen : null, !empty($this->id_almacen) ? PDO::PARAM_INT : PDO::PARAM_STR);
         }
         $s->bindValue(':cod', trim($this->codigo));
         $s->bindValue(':ser', trim($this->codigo_serial ?? '') ?: null);
@@ -302,7 +431,10 @@ class NuevoActivo {
         }
         $s->bindValue(':sede', trim($this->sede ?? '') ?: null);
         $s->bindValue(':est', $this->estado ?: 'operativo');
-        $s->bindValue(':rg', trim($this->responsable_general ?? '') ?: null);
+        if ($conRespGen) {
+            // Compatibilidad con BD sin migrar: la columna existe pero el campo ya no se usa
+            $s->bindValue(':rg', null);
+        }
         if ($conRespSec) {
             // Compatibilidad con BD sin migrar: la columna existe pero el campo ya no se usa
             $s->bindValue(':rs', null);
@@ -315,6 +447,7 @@ class NuevoActivo {
         $actuales = [
             'id_categoria' => $this->id_categoria,
             'id_trabajador' => !empty($this->id_trabajador) ? (int)$this->id_trabajador : '',
+            'id_almacen' => !empty($this->id_almacen) ? (int)$this->id_almacen : '',
             'codigo' => trim($this->codigo),
             'codigo_serial' => trim($this->codigo_serial ?? ''),
             'codigo_placa' => trim($this->codigo_placa ?? ''),
@@ -326,11 +459,11 @@ class NuevoActivo {
             'nombre' => trim($this->nombre),
             'sede' => trim($this->sede ?? ''),
             'estado' => $this->estado,
-            'responsable_general' => trim($this->responsable_general ?? ''),
-            // Nota: 'observaciones' y 'responsable_secundario' se eliminaron del módulo.
+            // Nota: 'observaciones', 'responsable_secundario' y 'responsable_general'
+            // se eliminaron del módulo; solo quedan dirección/área del trabajador.
         ];
         // Campos que solo se auditan si la columna existe en BD
-        $soloSiExiste = ['fecha_ingreso','codigo_cuenta_contable','codigo_grupo_activo_fijo','descripcion','valor','id_trabajador','responsable_secundario','codigo_placa'];
+        $soloSiExiste = ['fecha_ingreso','codigo_cuenta_contable','codigo_grupo_activo_fijo','descripcion','valor','id_trabajador','responsable_secundario','responsable_general','codigo_placa','id_almacen'];
         $cambios = 0;
         if (is_array($prev)) {
             foreach ($actuales as $campo => $nuevo) {
@@ -517,7 +650,7 @@ class NuevoActivo {
     }
 
     public function limpiarParaImportacion() {
-        foreach (['id_categoria','id_trabajador','codigo','codigo_serial','codigo_placa','fecha_ingreso','codigo_cuenta_contable','codigo_grupo_activo_fijo','descripcion','valor','nombre','sede','estado','responsable_general'] as $p) {
+        foreach (['id_categoria','id_trabajador','id_almacen','codigo','codigo_serial','codigo_placa','fecha_ingreso','codigo_cuenta_contable','codigo_grupo_activo_fijo','descripcion','valor','nombre','sede','estado'] as $p) {
             $this->$p = null;
         }
         $this->id_nuevo_activo = null;

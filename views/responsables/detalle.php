@@ -23,10 +23,10 @@ $hoy = date('Y-m-d');
                 <dt>Nombre Completo:</dt><dd><?php echo htmlspecialchars($trabajador['nombre_completo']); ?></dd>
                 <dt>Documento:</dt><dd><?php echo htmlspecialchars($trabajador['documento_identidad']); ?></dd>
                 <dt>Cargo:</dt><dd><?php echo htmlspecialchars($trabajador['cargo'] ?: 'N/A'); ?></dd>
-                <dt>Dependencia:</dt><dd><?php echo htmlspecialchars($trabajador['dependencia'] ?: 'N/A'); ?></dd>
+                <dt>Dirección:</dt><dd><?php echo htmlspecialchars($trabajador['direccion'] ?? '' ?: ($trabajador['dependencia'] ?? '' ?: 'N/A')); ?></dd>
+                <dt>Área:</dt><dd><?php echo htmlspecialchars($trabajador['area'] ?? '' ?: 'N/A'); ?></dd>
                 <dt>Tipo de Vinculación:</dt><dd><?php echo htmlspecialchars($trabajador['tipo_vinculacion'] ?: 'N/A'); ?></dd>
                 <dt>Centro de Costo:</dt><dd><?php echo htmlspecialchars($trabajador['centro_costo'] ?: 'N/A'); ?></dd>
-                <dt>Jefe Inmediato:</dt><dd><?php echo htmlspecialchars($trabajador['jefe_inmediato'] ?: 'N/A'); ?></dd>
                 <dt>Fecha de Ingreso:</dt><dd><?php echo !empty($trabajador['fecha_ingreso']) ? date('d/m/Y', strtotime($trabajador['fecha_ingreso'])) : 'N/A'; ?></dd>
             </dl>
         </div>

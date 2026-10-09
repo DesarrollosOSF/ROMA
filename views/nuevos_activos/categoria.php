@@ -147,7 +147,7 @@ a.pagination-link:hover { background: #eff6ff; border-color: #2563eb; color: #1d
                             <th>Activo</th>
                             <th>Sede</th>
                             <th>Estado</th>
-                            <th>Jefe Inmediato</th>
+                            <th>Trabajador</th>
                             <th>Valor</th>
                             <th style="text-align:center;">Adjuntos</th>
                             <th style="text-align:center;">Acciones</th>
@@ -164,7 +164,7 @@ a.pagination-link:hover { background: #eff6ff; border-color: #2563eb; color: #1d
                                 </td>
                                 <td><i class="fas fa-map-marker-alt" style="color:#94a3b8;"></i> <?php echo htmlspecialchars($a['sede'] ?: '—'); ?></td>
                                 <td><span class="estado-pill"><span class="estado-dot" style="background:<?php echo $colorEst; ?>;"></span><?php echo $estados[$a['estado']] ?? $a['estado']; ?></span></td>
-                                <td><?php echo htmlspecialchars($a['responsable_general'] ?: '—'); ?></td>
+                                <td><?php echo htmlspecialchars($a['trabajador_nombre'] ?? '' ?: '—'); ?></td>
                                 <td class="valor-destacado"><?php echo isset($a['valor']) && $a['valor'] !== null && $a['valor'] !== '' ? '$' . number_format((float)$a['valor'], 0, ',', '.') : '—'; ?></td>
                                 <td style="text-align:center;">
                                     <?php $nAdj = (int)(($conteoAdjuntos ?? [])[(int)$a['id_nuevo_activo']] ?? 0); ?>

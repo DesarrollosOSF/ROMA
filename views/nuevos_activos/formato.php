@@ -55,11 +55,15 @@ $hoy = date('Y-m-d');
                     <input type="text" name="trab_cargo" id="trab_cargo" placeholder="Ej: Auxiliar Administrativo">
                 </div>
                 <div class="form-group">
-                    <label>Área / Dependencia</label>
-                    <input type="text" name="trab_area" id="trab_area" placeholder="Ej: Sistemas" list="areasList">
-                    <datalist id="areasList">
-                        <?php foreach (ASSIGNED_AREAS as $a): ?><option value="<?php echo htmlspecialchars($a); ?>"><?php endforeach; ?>
+                    <label>Dirección a la que pertenece</label>
+                    <input type="text" name="trab_direccion" id="trab_direccion" placeholder="Ej: Operaciones" list="direccionesList">
+                    <datalist id="direccionesList">
+                        <?php foreach (array_keys(defined('DIRECCIONES_AREAS') ? DIRECCIONES_AREAS : []) as $d): ?><option value="<?php echo htmlspecialchars($d); ?>"><?php endforeach; ?>
                     </datalist>
+                </div>
+                <div class="form-group">
+                    <label>Área a la que pertenece</label>
+                    <input type="text" name="trab_area" id="trab_area" placeholder="Ej: Mantenimiento">
                 </div>
                 <div class="form-group">
                     <label>Tipo de Vinculación</label>
@@ -68,10 +72,6 @@ $hoy = date('Y-m-d');
                 <div class="form-group">
                     <label>Centro de Costo</label>
                     <input type="text" name="trab_centro_costo" id="trab_centro_costo" placeholder="Ej: CC-001">
-                </div>
-                <div class="form-group">
-                    <label>Jefe Inmediato</label>
-                    <input type="text" name="trab_jefe" id="trab_jefe" placeholder="Ej: María García">
                 </div>
                 <div class="form-group">
                     <label>Fecha de Ingreso</label>
@@ -365,10 +365,10 @@ function cargarTrabajador(id) {
             document.getElementById('trab_nombre').value = d.nombre_completo || '';
             document.getElementById('trab_documento').value = d.documento_identidad || '';
             document.getElementById('trab_cargo').value = d.cargo || '';
-            document.getElementById('trab_area').value = d.dependencia || '';
+            document.getElementById('trab_direccion').value = d.direccion || d.dependencia || '';
+            document.getElementById('trab_area').value = d.area || '';
             document.getElementById('trab_vinculacion').value = d.tipo_vinculacion || '';
             document.getElementById('trab_centro_costo').value = d.centro_costo || '';
-            document.getElementById('trab_jefe').value = d.jefe_inmediato || '';
             document.getElementById('trab_ingreso').value = d.fecha_ingreso || '';
             // Preseleccionar sus activos asociados
             const ids = (d.activos || []).map(String);

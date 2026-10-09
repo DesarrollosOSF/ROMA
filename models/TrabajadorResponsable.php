@@ -17,11 +17,27 @@ class TrabajadorResponsable {
     public $documento_identidad;
     public $cargo;
     public $dependencia;
+    public $direccion;
+    public $area;
     public $tipo_vinculacion;
     public $centro_costo;
-    public $jefe_inmediato;
     public $fecha_ingreso;
     public $usuario_creacion;
+
+    private $cacheColumnas = null;
+
+    private function tieneColumna($col) {
+        try {
+            if ($this->cacheColumnas === null) {
+                $st = $this->conn->query("SHOW COLUMNS FROM {$this->table}");
+                $cols = $st ? $st->fetchAll(PDO::FETCH_COLUMN, 0) : [];
+                $this->cacheColumnas = is_array($cols) ? $cols : [];
+            }
+            return in_array($col, $this->cacheColumnas, true);
+        } catch (Exception $e) {
+            return false;
+        }
+    }
 
     public function __construct() {
         $database = new Database();
@@ -49,9 +65,15 @@ class TrabajadorResponsable {
                       WHERE t.activo = 1";
             $params = [];
             if (!empty($filtros['busqueda'])) {
-                $query .= " AND (t.nombre_completo LIKE :b1 OR t.documento_identidad LIKE :b2
-                            OR t.cargo LIKE :b3 OR t.dependencia LIKE :b4)";
                 $b = '%' . $filtros['busqueda'] . '%';
+                if ($this->tieneColumna('direccion')) {
+                    $query .= " AND (t.nombre_completo LIKE :b1 OR t.documento_identidad LIKE :b2
+                                OR t.cargo LIKE :b3 OR t.direccion LIKE :b4 OR t.area LIKE :b5)";
+                    $params[':b5'] = $b;
+                } else {
+                    $query .= " AND (t.nombre_completo LIKE :b1 OR t.documento_identidad LIKE :b2
+                                OR t.cargo LIKE :b3 OR t.dependencia LIKE :b4)";
+                }
                 $params[':b1'] = $b;
                 $params[':b2'] = $b;
                 $params[':b3'] = $b;
@@ -121,18 +143,30 @@ class TrabajadorResponsable {
     }
 
     public function crear() {
+        $conDir = $this->tieneColumna('direccion');
+        $conJefe = $this->tieneColumna('jefe_inmediato');
         $q = "INSERT INTO {$this->table}
-              (nombre_completo, documento_identidad, cargo, dependencia, tipo_vinculacion,
-               centro_costo, jefe_inmediato, fecha_ingreso, usuario_creacion)
-              VALUES (:nom, :doc, :cargo, :dep, :vinc, :cc, :jefe, :fing, :u)";
+              (nombre_completo, documento_identidad, cargo, dependencia, "
+              . ($conDir ? "direccion, area, " : "")
+              . "tipo_vinculacion, centro_costo, " . ($conJefe ? "jefe_inmediato, " : "") . "fecha_ingreso, usuario_creacion)
+              VALUES (:nom, :doc, :cargo, :dep, "
+              . ($conDir ? ":dir, :area, " : "")
+              . ":vinc, :cc, " . ($conJefe ? ":jefe, " : "") . ":fing, :u)";
         $s = $this->conn->prepare($q);
         $s->bindValue(':nom', trim($this->nombre_completo));
         $s->bindValue(':doc', trim($this->documento_identidad));
         $s->bindValue(':cargo', trim($this->cargo ?? '') ?: null);
         $s->bindValue(':dep', trim($this->dependencia ?? '') ?: null);
+        if ($conDir) {
+            $s->bindValue(':dir', trim($this->direccion ?? '') ?: null);
+            $s->bindValue(':area', trim($this->area ?? '') ?: null);
+        }
         $s->bindValue(':vinc', trim($this->tipo_vinculacion ?? '') ?: null);
         $s->bindValue(':cc', trim($this->centro_costo ?? '') ?: null);
-        $s->bindValue(':jefe', trim($this->jefe_inmediato ?? '') ?: null);
+        if ($conJefe) {
+            // Compatibilidad con BD sin migrar: la columna existe pero el campo ya no se usa
+            $s->bindValue(':jefe', null);
+        }
         $s->bindValue(':fing', $this->fecha_ingreso ?: null);
         $s->bindValue(':u', $this->usuario_creacion ?: null, $this->usuario_creacion ? PDO::PARAM_INT : PDO::PARAM_STR);
         $s->execute();
@@ -141,18 +175,30 @@ class TrabajadorResponsable {
     }
 
     public function actualizar() {
+        $conDir = $this->tieneColumna('direccion');
+        $conJefe = $this->tieneColumna('jefe_inmediato');
         $q = "UPDATE {$this->table} SET nombre_completo = :nom, documento_identidad = :doc,
-              cargo = :cargo, dependencia = :dep, tipo_vinculacion = :vinc, centro_costo = :cc,
-              jefe_inmediato = :jefe, fecha_ingreso = :fing
+              cargo = :cargo, dependencia = :dep, "
+              . ($conDir ? "direccion = :dir, area = :area, " : "")
+              . "tipo_vinculacion = :vinc, centro_costo = :cc, "
+              . ($conJefe ? "jefe_inmediato = :jefe, " : "")
+              . "fecha_ingreso = :fing
               WHERE id_trabajador = :id";
         $s = $this->conn->prepare($q);
         $s->bindValue(':nom', trim($this->nombre_completo));
         $s->bindValue(':doc', trim($this->documento_identidad));
         $s->bindValue(':cargo', trim($this->cargo ?? '') ?: null);
         $s->bindValue(':dep', trim($this->dependencia ?? '') ?: null);
+        if ($conDir) {
+            $s->bindValue(':dir', trim($this->direccion ?? '') ?: null);
+            $s->bindValue(':area', trim($this->area ?? '') ?: null);
+        }
         $s->bindValue(':vinc', trim($this->tipo_vinculacion ?? '') ?: null);
         $s->bindValue(':cc', trim($this->centro_costo ?? '') ?: null);
-        $s->bindValue(':jefe', trim($this->jefe_inmediato ?? '') ?: null);
+        if ($conJefe) {
+            // Compatibilidad con BD sin migrar: la columna existe pero el campo ya no se usa
+            $s->bindValue(':jefe', null);
+        }
         $s->bindValue(':fing', $this->fecha_ingreso ?: null);
         $s->bindValue(':id', (int)$this->id_trabajador, PDO::PARAM_INT);
         $s->execute();
