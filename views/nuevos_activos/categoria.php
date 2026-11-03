@@ -119,6 +119,16 @@ a.pagination-link:hover { background: #eff6ff; border-color: #2563eb; color: #1d
                     <label>Sede</label>
                     <input type="text" name="sede" value="<?php echo htmlspecialchars($_GET['sede'] ?? ''); ?>" placeholder="Filtrar por sede">
                 </div>
+                <div class="form-group">
+                    <label>Código del activo</label>
+                    <select name="con_codigo">
+                        <option value="">Todos</option>
+                        <option value="con" <?php echo (($_GET['con_codigo'] ?? '') === 'con') ? 'selected' : ''; ?>>Con código</option>
+                        <option value="sin" <?php echo (($_GET['con_codigo'] ?? '') === 'sin') ? 'selected' : ''; ?>>Sin código (incluye serial/placa)</option>
+                        <option value="SIN SERIE" <?php echo (($_GET['con_codigo'] ?? '') === 'SIN SERIE') ? 'selected' : ''; ?>>Sin código serial</option>
+                        <option value="sin_placa" <?php echo (($_GET['con_codigo'] ?? '') === 'sin_placa') ? 'selected' : ''; ?>>Sin código de placa</option>
+                    </select>
+                </div>
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Filtrar</button>

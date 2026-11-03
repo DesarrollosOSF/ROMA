@@ -30,11 +30,12 @@ class NotificacionesController {
             exit;
         }
 
-        // Obtener notificaciones no leídas
+        // Obtener notificaciones no leídas de hoy
         $query = "SELECT id_notificacion, tipo_notificacion, titulo, mensaje, id_referencia, fecha_creacion 
                   FROM notificaciones 
                   WHERE id_usuario = :usuario_id 
                   AND leida = 0 
+                  AND DATE(fecha_creacion) = CURDATE()
                   ORDER BY fecha_creacion DESC 
                   LIMIT 20";
         

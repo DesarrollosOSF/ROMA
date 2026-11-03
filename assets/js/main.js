@@ -408,7 +408,7 @@ function cargarNotificaciones() {
                 notificationsList.innerHTML = `
                     <div class="notification-empty">
                         <i class="fas fa-bell-slash"></i>
-                        <p>No hay notificaciones</p>
+                        <p>No hay notificaciones de hoy</p>
                     </div>
                 `;
             } else {

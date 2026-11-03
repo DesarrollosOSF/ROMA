@@ -84,6 +84,7 @@ $hoy = date('Y-m-d');
     <div class="card">
         <div class="card-header"><h3><i class="fas fa-boxes"></i> 2. Activos Asignados <span class="required">*</span></h3></div>
         <div class="card-body">
+            <p class="text-muted">Activos en el listado: <strong><?php echo count($todosActivos); ?></strong> · Preseleccionados para el formato: <strong><?php echo (int)count($preIds); ?></strong></p>
             <div class="form-group">
                 <label>Buscar en el listado</label>
                 <input type="text" id="filtroActivos" placeholder="Filtrar por código, nombre, sede..." onkeyup="filtrarActivos()">
@@ -110,14 +111,14 @@ $hoy = date('Y-m-d');
                         <tbody>
                             <?php foreach ($todosActivos as $a): ?>
                                 <tr>
-                                    <td><input type="checkbox" name="activos_sel[]" value="<?php echo (int)$a['id_nuevo_activo']; ?>" class="chk-activo"></td>
+                                    <td><input type="checkbox" name="activos_sel[]" value="<?php echo (int)$a['id_nuevo_activo']; ?>" class="chk-activo" <?php echo in_array((int)$a['id_nuevo_activo'], (array)($preIds ?? []), true) ? 'checked' : ''; ?>></td>
                                     <td><strong><?php echo htmlspecialchars($a['codigo']); ?></strong></td>
                                     <td><?php echo htmlspecialchars($a['codigo_serial'] ?: '—'); ?></td>
                                     <td><?php echo htmlspecialchars($a['nombre']); ?></td>
                                     <td><?php echo htmlspecialchars($a['categoria_nombre'] ?? ''); ?></td>
                                     <td><?php echo htmlspecialchars($a['sede'] ?: '—'); ?></td>
                                     <td><?php echo htmlspecialchars($estados[$a['estado']] ?? $a['estado']); ?></td>
-                                    <td><input type="date" name="entrega_fecha[<?php echo (int)$a['id_nuevo_activo']; ?>]" value="<?php echo $hoy; ?>"></td>
+                                    <td><input type="date" name="entrega_fecha[<?php echo (int)$a['id_nuevo_activo']; ?>" id="entrega_fecha_<?php echo (int)$a['id_nuevo_activo']; ?>" value="<?php echo $hoy; ?>"></td>
                                     <td>
                                         <select name="entrega_estado[<?php echo (int)$a['id_nuevo_activo']; ?>]">
                                             <?php foreach ($estados as $k => $v): ?>
@@ -222,17 +223,34 @@ $hoy = date('Y-m-d');
                     <label>Fecha firma trabajador</label>
                     <input type="date" name="firma_trab_fecha" value="<?php echo $hoy; ?>">
                 </div>
+                <div class="form-group form-group-full">
+                    <label>Director / Responsable que firma la constancia</label>
+                    <select id="selDirector">
+                        <option value="">— Seleccionar responsable —</option>
+                        <?php foreach ($trabajadores as $tr): ?>
+                            <?php if (empty($tr['direccion'])) continue; ?>
+                            <option value="<?php echo (int)$tr['id_trabajador']; ?>" data-nombre="<?php echo htmlspecialchars($tr['nombre_completo']); ?>" data-cargo="<?php echo htmlspecialchars($tr['cargo']); ?>" data-direccion="<?php echo htmlspecialchars($tr['direccion']); ?>">
+                                <?php echo htmlspecialchars($tr['nombre_completo'] . ' (' . ($tr['cargo'] ?: 'Sin cargo') . ')'); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small>Dirección del responsable: <span id="dirResponsable">—</span></small>
+                </div>
                 <div class="form-group">
                     <label>Responsable de inventarios (nombre)</label>
-                    <input type="text" name="resp_nombre" value="<?php echo htmlspecialchars($_SESSION['usuario_nombre'] ?? ''); ?>">
+                    <input type="text" name="resp_nombre" id="resp_nombre" value="<?php echo htmlspecialchars($_SESSION['usuario_nombre'] ?? ''); ?>">
                 </div>
                 <div class="form-group">
                     <label>Responsable de inventarios (cargo)</label>
-                    <input type="text" name="resp_cargo" placeholder="Ej: Almacenista">
+                    <input type="text" name="resp_cargo" id="resp_cargo" placeholder="Ej: Director">
+                </div>
+                <div class="form-group">
+                    <label>Dirección del responsable</label>
+                    <input type="text" name="resp_direccion" id="resp_direccion" placeholder="Ej: Operaciones">
                 </div>
                 <div class="form-group">
                     <label>Fecha firma responsable</label>
-                    <input type="date" name="resp_fecha" value="<?php echo $hoy; ?>">
+                    <input type="date" name="resp_fecha" id="resp_fecha" value="<?php echo $hoy; ?>">
                 </div>
             </div>
             <div class="form-actions">
@@ -246,6 +264,60 @@ $hoy = date('Y-m-d');
 <script>
 const ACTIVOS_POR_PAGINA = 10;
 let paginaActivos = 1;
+
+const ACTIVOS_PRESELECCIONADOS = <?php echo json_encode(array_map('strval', (array)($preIds ?? []))); ?>;
+const TRABAJADORES = <?php echo json_encode(array_map(function ($tr) {
+    return [
+        'id' => (int)($tr['id_trabajador'] ?? 0),
+        'nombre_completo' => $tr['nombre_completo'] ?? '',
+        'documento' => $tr['documento_identidad'] ?? '',
+        'cargo' => $tr['cargo'] ?? '',
+        'direccion' => $tr['direccion'] ?? ($tr['dependencia'] ?? ''),
+        'fecha_ingreso' => $tr['fecha_ingreso'] ?? '',
+    ];
+}, $trabajadores)); ?>;
+
+function actualizarDirectores(direccion) {
+    const sel = document.getElementById('selDirector');
+    const dirSpan = document.getElementById('dirResponsable');
+    if (!sel) return;
+    const dir = (direccion || '').trim();
+    if (dirSpan) dirSpan.textContent = dir || '—';
+    sel.innerHTML = '<option value="">— Seleccionar responsable —</option>';
+    (window.TRABAJADORES || []).forEach(function (t) {
+        if ((t.direccion || '') !== dir) return;
+        const o = document.createElement('option');
+        o.value = t.id;
+        o.textContent = t.nombre_completo + ' — ' + (t.cargo || t.area || '');
+        sel.appendChild(o);
+    });
+}
+
+function onDirectorChange() {
+    const sel = document.getElementById('selDirector');
+    if (!sel || !sel.value) return;
+    const t = (window.TRABAJADORES || []).find(function (x) { return String(x.id) === String(sel.value); });
+    if (!t) return;
+    document.getElementById('resp_direccion').value = t.direccion || t.dependencia || '';
+    document.getElementById('resp_nombre').value = t.nombre_completo || '';
+    document.getElementById('resp_cargo').value = t.cargo || '';
+    const f = document.getElementById('resp_fecha');
+    if (f && !f.value) { f.value = document.getElementById('firma_trab_fecha').value; }
+    // Si el director recibe la constancia, completar sus datos en el bloque del trabajador
+    const trabDir = document.getElementById('trab_direccion');
+    const trabNom = document.getElementById('trab_nombre');
+    const trabDoc = document.getElementById('trab_documento');
+    const trabCargo = document.getElementById('trab_cargo');
+    if (trabDir) document.getElementById('trab_direccion').value = t.direccion || t.dependencia || '';
+    if (trabNom && t.nombre_completo) document.getElementById('trab_nombre').value = t.nombre_completo;
+    if (trabDoc && t.documento) document.getElementById('trab_documento').value = t.documento;
+    if (trabCargo && t.cargo) document.getElementById('trab_cargo').value = t.cargo;
+    // Precargar la fecha de entrega (editable) con la fecha de ingreso del director/trabajador
+    document.querySelectorAll('#tablaActivosFormato .chk-activo:checked').forEach(function (c) {
+        const inp = document.getElementById('entrega_fecha_' + c.value);
+        if (inp) inp.value = t.fecha_ingreso || '';
+    });
+}
 
 function filasActivos() {
     const t = document.getElementById('tablaActivosFormato');
@@ -370,15 +442,29 @@ function cargarTrabajador(id) {
             document.getElementById('trab_vinculacion').value = d.tipo_vinculacion || '';
             document.getElementById('trab_centro_costo').value = d.centro_costo || '';
             document.getElementById('trab_ingreso').value = d.fecha_ingreso || '';
-            // Preseleccionar sus activos asociados
+            // Preseleccionar sus activos asociados (o los previamente seleccionados desde el listado)
             const ids = (d.activos || []).map(String);
+            const pre = ACTIVOS_PRESELECCIONADOS.map(String);
             document.querySelectorAll('#tablaActivosFormato .chk-activo').forEach(function (c) {
-                c.checked = ids.includes(c.value);
+                c.checked = ids.includes(c.value) || pre.includes(c.value);
             });
             // Precargar su control de devolución / cambio / traslado
             pintarMovimientos(d.movimientos || []);
+            // Actualizar lista de directores según la dirección del trabajador
+            actualizarDirectores(d.direccion || d.dependencia || '');
+            // Precargar la fecha de entrega (editable) con la fecha de ingreso del trabajador
+            document.querySelectorAll('#tablaActivosFormato .chk-activo:checked').forEach(function (c) {
+                const inp = document.getElementById('entrega_fecha_' + c.value);
+                if (inp) inp.value = d.fecha_ingreso || '';
+            });
         });
 }
+document.addEventListener('DOMContentLoaded', function () {
+    const selDir = document.getElementById('selDirector');
+    if (selDir) selDir.addEventListener('change', onDirectorChange);
+    const trabDir = document.getElementById('trab_direccion');
+    if (trabDir) trabDir.addEventListener('input', function () { actualizarDirectores(this.value); });
+});
 <?php if (!empty($preTrabajador)): ?>
 document.addEventListener('DOMContentLoaded', function () { cargarTrabajador('<?php echo (int)$preTrabajador; ?>'); });
 <?php endif; ?>

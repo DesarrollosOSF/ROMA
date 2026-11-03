@@ -115,6 +115,27 @@ class NuevoActivo {
                 $query .= " AND n.sede LIKE :sede";
                 $params[':sede'] = '%' . $filtros['sede'] . '%';
             }
+            if (!empty($filtros['direccion'])) {
+                if ($conTrab) {
+                    $query .= " AND t.direccion = :dir";
+                    $params[':dir'] = $filtros['direccion'];
+                } else {
+                    // Sin tabla de trabajadores disponible: se filtra por sede textual
+                    $query .= " AND n.sede LIKE :sede2";
+                    $params[':sede2'] = '%' . $filtros['direccion'] . '%';
+                }
+            }
+            if (!empty($filtros['con_codigo'])) {
+                if ($filtros['con_codigo'] === 'sin') {
+                    $query .= " AND (n.codigo IS NULL OR n.codigo = '')";
+                } elseif ($filtros['con_codigo'] === 'sin_serial') {
+                    $query .= " AND (n.codigo_serial IS NULL OR n.codigo_serial = '')";
+                } elseif ($filtros['con_codigo'] === 'sin_placa') {
+                    $query .= " AND (n.codigo_placa IS NULL OR n.codigo_placa = '')";
+                } else {
+                    $query .= " AND (n.codigo IS NOT NULL AND n.codigo <> '')";
+                }
+            }
             if (!empty($filtros['id_trabajador']) && $conTrab) {
                 $query .= " AND n.id_trabajador = :trab";
                 $params[':trab'] = (int)$filtros['id_trabajador'];
@@ -182,6 +203,17 @@ class NuevoActivo {
                 $params[':b1'] = $b;
                 $params[':b2'] = $b;
                 $params[':b3'] = $b;
+            }
+            if (!empty($filtros['con_codigo'])) {
+                if ($filtros['con_codigo'] === 'sin') {
+                    $query .= " AND (n.codigo IS NULL OR n.codigo = '')";
+                } elseif ($filtros['con_codigo'] === 'sin_serial') {
+                    $query .= " AND (n.codigo_serial IS NULL OR n.codigo_serial = '')";
+                } elseif ($filtros['con_codigo'] === 'sin_placa') {
+                    $query .= " AND (n.codigo_placa IS NULL OR n.codigo_placa = '')";
+                } else {
+                    $query .= " AND (n.codigo IS NOT NULL AND n.codigo <> '')";
+                }
             }
             $stmt = $this->conn->prepare($query);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v);
@@ -628,10 +660,32 @@ class NuevoActivo {
                 'porCategoria' => is_array($porCategoria) ? $porCategoria : [],
                 'porEstado' => is_array($porEstado) ? $porEstado : [],
                 'porSede' => is_array($porSede) ? $porSede : [],
+                'porDireccion' => $this->reportePorDireccion(),
             ];
         } catch (Exception $e) {
             error_log("NuevoActivo::reporteGeneral: " . $e->getMessage());
-            return ['total' => 0, 'porCategoria' => [], 'porEstado' => [], 'porSede' => []];
+            return ['total' => 0, 'porCategoria' => [], 'porEstado' => [], 'porSede' => [], 'porDireccion' => []];
+        }
+    }
+
+    /** Conteo de activos por Dirección (responsable asignado) */
+    public function reportePorDireccion() {
+        try {
+            $q = "SELECT COALESCE(NULLIF(t.direccion, ''), '(Sin asignar)') AS direccion, COUNT(*) AS total
+                  FROM nuevos_activos n
+                  LEFT JOIN trabajadores_responsables t ON t.id_trabajador = n.id_trabajador AND t.activo = 1
+                  WHERE n.activo = 1
+                  GROUP BY COALESCE(NULLIF(t.direccion, ''), '(Sin asignar)')
+                  ORDER BY total DESC, direccion ASC";
+            $res = $this->conn->query($q)->fetchAll();
+            $out = [];
+            foreach ($res as $r) {
+                $out[] = ['direccion' => $r['direccion'], 'total' => (int)$r['total']];
+            }
+            return $out;
+        } catch (Exception $e) {
+            error_log("NuevoActivo::reportePorDireccion: " . $e->getMessage());
+            return [];
         }
     }
 

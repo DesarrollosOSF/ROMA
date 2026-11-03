@@ -120,6 +120,34 @@ foreach (($reporte['porSede'] ?? []) as $s) {
     </div>
 </div>
 
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-sitemap"></i> Activos por Dirección</h3>
+    </div>
+    <div class="card-body">
+        <?php if (empty($reporte['porDireccion'])): ?>
+            <div class="empty-state">
+                <i class="fas fa-sitemap"></i>
+                <p>No hay activos asignados por dirección</p>
+            </div>
+        <?php else: ?>
+            <div class="category-cards">
+                <?php foreach ($reporte['porDireccion'] as $d): ?>
+                    <div class="category-card stat-info">
+                        <a class="category-main" href="<?php echo BASE_URL; ?>index.php?action=nuevos_activos&subaction=listado&direccion=<?php echo urlencode($d['direccion']); ?>">
+                            <div class="category-icon"><i class="fas fa-map-marker-alt"></i></div>
+                            <div class="category-info">
+                                <h3><?php echo number_format((int)$d['total']); ?></h3>
+                                <p><?php echo htmlspecialchars($d['direccion']); ?></p>
+                            </div>
+                        </a>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="dashboard-grid">
     <div class="card">
         <div class="card-header"><h3><i class="fas fa-chart-pie"></i> Distribución por Grupo</h3></div>

@@ -113,6 +113,7 @@ class NuevosActivosController {
             'estado' => trim($_GET['estado'] ?? ''),
             'sede' => trim($_GET['sede'] ?? ''),
             'busqueda' => trim($_GET['busqueda'] ?? ''),
+            'con_codigo' => trim($_GET['con_codigo'] ?? ''),
         ];
         $pagina = max(1, (int)($_GET['pagina'] ?? 1));
         $porPagina = 10;
@@ -126,6 +127,33 @@ class NuevosActivosController {
         $puedeGenerarFormato = $this->puedeGenerarFormato();
         $esAdminGeneral = Usuario::esAdminGeneral($_SESSION['usuario_rol'] ?? '');
         require_once __DIR__ . '/../views/nuevos_activos/categoria.php';
+    }
+
+    /** Listado general de activos con filtros (usado por indicadores por Dirección) */
+    public function listado() {
+        $this->exigirVer();
+        $filtros = [
+            'busqueda' => trim($_GET['busqueda'] ?? ''),
+            'estado' => trim($_GET['estado'] ?? ''),
+            'sede' => trim($_GET['sede'] ?? ''),
+            'id_categoria' => trim($_GET['id_categoria'] ?? ''),
+            'direccion' => trim($_GET['direccion'] ?? ''),
+            'con_codigo' => trim($_GET['con_codigo'] ?? ''),
+        ];
+        $pagina = max(1, (int)($_GET['pagina'] ?? 1));
+        $porPagina = 10;
+        $total = $this->modelo->contar($filtros);
+        $totalPaginas = max(1, (int)ceil($total / $porPagina));
+        $pagina = min($pagina, $totalPaginas);
+        $activos = $this->modelo->listar($filtros + ['limit' => $porPagina, 'offset' => ($pagina - 1) * $porPagina]);
+        $conteoAdjuntos = $this->modelo->contarAdjuntosPorActivos(array_column($activos, 'id_nuevo_activo'));
+        $estados = NuevoActivo::estados();
+        $puedeGestionar = $this->puedeGestionar();
+        $puedeGenerarFormato = $this->puedeGenerarFormato();
+        $esAdminGeneral = Usuario::esAdminGeneral($_SESSION['usuario_rol'] ?? '');
+        $filtrosListado = $filtros;
+        $direccionFiltro = trim($_GET['direccion'] ?? '');
+        require_once __DIR__ . '/../views/nuevos_activos/listado.php';
     }
 
     public function crear() {
@@ -758,6 +786,30 @@ class NuevosActivosController {
         $trabModel = new TrabajadorResponsable();
         $trabajadores = $trabModel->listar();
         $preTrabajador = (int)($_GET['trabajador'] ?? 0);
+        // Activos a preseleccionar (p. ej. desde el listado filtrado por Dirección)
+        // - Con parametro generar_listado: se toman TODOS los activos que coinciden con los filtros
+        // - Con parametro activos: ids concretos separados por coma
+        $preIds = [];
+        if (!empty($_GET['generar_listado'])) {
+            $fGen = [
+                'id_categoria' => trim($_GET['id_categoria'] ?? ''),
+                'estado' => trim($_GET['estado'] ?? ''),
+                'sede' => trim($_GET['sede'] ?? ''),
+                'busqueda' => trim($_GET['busqueda'] ?? ''),
+                'con_codigo' => trim($_GET['con_codigo'] ?? ''),
+                'direccion' => trim($_GET['direccion'] ?? ''),
+            ];
+            $activosGen = $this->modelo->listar($fGen + ['limit' => 5000]);
+            foreach ($activosGen as $a) {
+                $preIds[] = (int)$a['id_nuevo_activo'];
+            }
+        }
+        if (empty($preIds) && !empty($_GET['activos'])) {
+            foreach (explode(',', (string)$_GET['activos']) as $aid) {
+                $aid = (int)$aid;
+                if ($aid > 0) $preIds[] = $aid;
+            }
+        }
         // Si viene de la ficha del trabajador, precargar su control de movimientos
         $movimientosPrevios = [];
         if ($preTrabajador > 0) {
@@ -767,6 +819,14 @@ class NuevosActivosController {
             } else {
                 $preTrabajador = 0;
             }
+        }
+        // Listado de activos: cuando viene de generar_listado se usan los activos filtrados;
+        // si viene de un trabajador se listan los activos de ese trabajador.
+        $todosActivos = $this->modelo->listar(['limit' => 2000]);
+        if (!empty($_GET['generar_listado'])) {
+            $todosActivos = $this->modelo->listar($fGen + ['limit' => 5000]);
+        } elseif ($preTrabajador > 0) {
+            $todosActivos = $this->modelo->listar(['id_trabajador' => (int)$preTrabajador, 'limit' => 2000]);
         }
         require_once __DIR__ . '/../views/nuevos_activos/formato.php';
     }
@@ -903,9 +963,11 @@ class NuevosActivosController {
             'responsable' => [
                 'nombre' => trim($_POST['resp_nombre'] ?? ''),
                 'cargo' => trim($_POST['resp_cargo'] ?? ''),
+                'direccion' => trim($_POST['resp_direccion'] ?? ''),
                 'fecha' => trim($_POST['resp_fecha'] ?? ''),
             ],
             'generado_por' => $_SESSION['usuario_nombre'] ?? '',
+            'resp_direccion' => trim($_POST['resp_direccion'] ?? ''),
         ];
         require_once __DIR__ . '/../views/nuevos_activos/formato_pdf.php';
     }

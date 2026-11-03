@@ -163,6 +163,9 @@ try {
                         $controller->index();
                     }
                     break;
+                case 'listado':
+                    $controller->listado();
+                    break;
                 case 'crear':
                     $controller->crear();
                     break;

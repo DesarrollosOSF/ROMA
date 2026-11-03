@@ -186,10 +186,14 @@ $fd = function ($v) {
         </div>
         <div class="firma">
             <div class="linea">
-                <strong>Firma del Responsable de Inventarios</strong><br>
+                <strong>Firma del Director / Responsable de Inventarios</strong><br>
+                Dirección: <?php echo htmlspecialchars($f($resp['direccion'] ?? '')); ?><br>
                 Nombre: <?php echo htmlspecialchars($f($resp['nombre'])); ?><br>
                 Cargo: <?php echo htmlspecialchars($f($resp['cargo'])); ?><br>
-                Fecha: <?php echo htmlspecialchars($fd($resp['fecha'])); ?>
+                Fecha: <?php echo htmlspecialchars($fd($resp['fecha'])); ?><br>
+                <?php if (!empty(trim((string)($formato['obs_generales'] ?? '')))): ?>
+                    <span class="small">Observación: <?php echo htmlspecialchars($formato['obs_generales']); ?></span>
+                <?php endif; ?>
             </div>
         </div>
     </div>
